@@ -1,0 +1,10 @@
+﻿model,iteration,sse
+Random initialization (1 start),1,467.02723037404616
+Random initialization (1 start),2,434.2102972617675
+Random initialization (1 start),3,432.1647385794191
+Random initialization (1 start),4,431.28032504121154
+Random initialization (1 start),5,431.168560220022
+K-Means++ (1 start),1,432.5647579000566
+K-Means++ (1 start),2,431.14834651156065
+K-Means++ (1 start),3,430.7230708044151
+K-Means++ (1 start),4,430.7230708044151

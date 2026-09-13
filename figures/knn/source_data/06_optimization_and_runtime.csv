@@ -1,0 +1,21 @@
+﻿section,series,metric,training_size,value
+performance,Base,accuracy,,0.9469026548672567
+performance,+ Scale,accuracy,,0.9646017699115044
+performance,+ Distance weight,accuracy,,0.9646017699115044
+performance,Manhattan p=1,accuracy,,0.9646017699115044
+performance,Full heap,accuracy,,0.9646017699115044
+performance,Base,f1,,0.9285714285714286
+performance,+ Scale,f1,,0.9534883720930233
+performance,+ Distance weight,f1,,0.9534883720930233
+performance,Manhattan p=1,f1,,0.9534883720930233
+performance,Full heap,f1,,0.9534883720930233
+runtime,Full sort,milliseconds,1000,1.6306999896187335
+runtime,Full sort,milliseconds,5000,12.781600002199411
+runtime,Full sort,milliseconds,10000,26.253100018948317
+runtime,Full sort,milliseconds,50000,135.9132000070531
+runtime,Full sort,milliseconds,100000,278.9684000017587
+runtime,Heap selection,milliseconds,1000,0.6336999940685928
+runtime,Heap selection,milliseconds,5000,3.1980000203475356
+runtime,Heap selection,milliseconds,10000,6.11460002255626
+runtime,Heap selection,milliseconds,50000,28.49860000424087
+runtime,Heap selection,milliseconds,100000,54.34719999902882

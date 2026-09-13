@@ -1,0 +1,5 @@
+﻿true_class,predicted_class,count
+Benign,Benign,70
+Benign,Malignant,1
+Malignant,Benign,1
+Malignant,Malignant,41
