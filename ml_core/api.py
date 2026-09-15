@@ -81,6 +81,8 @@ def _validate_common_config(config: ExperimentConfig) -> None:
         raise InvalidConfigError("dataset must be a non-empty string")
     if not isinstance(config.params, Mapping):
         raise InvalidConfigError("params must be a mapping")
+    if any(not isinstance(name, str) or not name for name in config.params):
+        raise InvalidParameterError("parameter names must be non-empty strings")
     if isinstance(config.random_state, bool) or not isinstance(config.random_state, int):
         raise InvalidConfigError("random_state must be an integer")
     if config.test_size is not None:

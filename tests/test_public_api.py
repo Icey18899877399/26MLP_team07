@@ -122,6 +122,25 @@ class DiscoveryAndValidationTests(unittest.TestCase):
                 )
             )
 
+    def test_non_string_parameter_keys_use_the_public_validation_error(self):
+        ml_core = importlib.import_module("ml_core")
+        invalid_parameter_maps = [
+            {1: 2},
+            {"l2": 0.1, 1: 2},
+            {"unknown": 0, 1: 2},
+        ]
+
+        for params in invalid_parameter_maps:
+            with self.subTest(params=params):
+                with self.assertRaises(ml_core.InvalidParameterError):
+                    ml_core.run_experiment(
+                        ml_core.ExperimentConfig(
+                            model="logistic_regression.optimized",
+                            dataset="wdbc",
+                            params=params,
+                        )
+                    )
+
     def test_every_advertised_model_runs_with_its_default_dataset(self):
         ml_core = importlib.import_module("ml_core")
         dataset_ids = {item.id for item in ml_core.list_datasets()}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Mapping, TypeAlias
+from typing import Mapping, TypeAlias
 
 
 JSONScalar: TypeAlias = None | bool | int | float | str
@@ -43,7 +43,7 @@ class ExperimentResult:
     artifacts: tuple[ArtifactInfo, ...] = ()
     metadata: dict[str, JSONValue] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, JSONValue]:
         """Return a deep, JSON-serializable representation."""
 
         return asdict(self)

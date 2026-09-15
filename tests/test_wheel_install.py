@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 
 class InstalledWheelSmokeTests(unittest.TestCase):
@@ -12,6 +13,7 @@ class InstalledWheelSmokeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             try:
                 os.chdir(temporary_directory)
+                import ml_core
                 from ml_core import (
                     ExperimentConfig,
                     list_datasets,
@@ -21,6 +23,11 @@ class InstalledWheelSmokeTests(unittest.TestCase):
 
                 self.assertEqual(len(list_models()), 2)
                 self.assertEqual(len(list_datasets()), 2)
+                if os.environ.get("ML_CORE_EXPECT_WHEEL") == "1":
+                    checkout = Path(__file__).resolve().parents[1]
+                    imported_from = Path(ml_core.__file__).resolve()
+                    self.assertNotIn(checkout, imported_from.parents)
+                    self.assertIn("site-packages", imported_from.parts)
                 result = run_experiment(
                     ExperimentConfig(
                         model="kmeans.optimized",

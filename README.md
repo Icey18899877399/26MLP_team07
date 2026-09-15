@@ -55,7 +55,13 @@ print(result.to_dict())
 Configuration mistakes use a public exception hierarchy:
 
 ```python
-from ml_core import InvalidParameterError, MLCoreError
+from ml_core import ExperimentConfig, InvalidParameterError, MLCoreError, run_experiment
+
+config = ExperimentConfig(
+    model="logistic_regression.optimized",
+    dataset="wdbc",
+    test_size=0.2,
+)
 
 try:
     result = run_experiment(config)
