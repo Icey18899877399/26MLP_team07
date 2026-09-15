@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from .adapters.classification import run_logistic_regression
+from .adapters.clustering import run_kmeans
 from .datasets import LoadedDataset
 from .types import ExperimentConfig, ExperimentResult, JSONValue, ModelInfo
 
@@ -103,3 +104,4 @@ def register_runner(model_id: str, runner: Runner) -> None:
 
 
 register_runner("logistic_regression.optimized", run_logistic_regression)
+register_runner("kmeans.optimized", run_kmeans)

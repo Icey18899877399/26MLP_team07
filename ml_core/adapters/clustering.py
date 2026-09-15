@@ -1,0 +1,113 @@
+"""Clustering experiment adapters."""
+
+from __future__ import annotations
+
+import math
+from collections import Counter, defaultdict
+from uuid import uuid4
+
+from Models.kmeans_optimized import OptimizedKMeansScratch
+
+from ..datasets import LoadedDataset
+from ..errors import InvalidParameterError
+from ..types import ExperimentConfig, ExperimentResult, JSONValue
+
+
+def run_kmeans(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+) -> ExperimentResult:
+    """Fit optimized K-Means and normalize its clustering report."""
+
+    _validate_kmeans_params(effective_params, sample_count=len(dataset.features))
+    model = OptimizedKMeansScratch(
+        **effective_params,
+        random_state=config.random_state,
+    )
+    labels = model.fit_predict(dataset.features)
+    cluster_sizes = Counter(labels)
+
+    return ExperimentResult(
+        run_id=str(uuid4()),
+        model=config.model,
+        dataset=config.dataset,
+        task="clustering",
+        effective_params=dict(effective_params),
+        metrics={
+            "inertia": float(model.inertia_),
+            "adjusted_rand_index": adjusted_rand_index(dataset.targets, labels),
+            "n_clusters": int(model.n_clusters),
+        },
+        metadata={
+            "sample_count": len(dataset.features),
+            "feature_count": dataset.info.feature_count,
+            "iteration_count": model.n_iter_,
+            "random_state": config.random_state,
+            "cluster_sizes": {
+                str(cluster): cluster_sizes.get(cluster, 0)
+                for cluster in range(model.n_clusters)
+            },
+        },
+    )
+
+
+def adjusted_rand_index(reference: list[int] | tuple[int, ...], predicted: list[int]) -> float:
+    """Compute the adjusted Rand index without a third-party dependency."""
+
+    if len(reference) != len(predicted):
+        raise ValueError("reference and predicted labels must have the same length")
+    if len(reference) < 2:
+        return 1.0
+
+    contingency: dict[tuple[int, int], int] = defaultdict(int)
+    reference_counts: Counter[int] = Counter()
+    predicted_counts: Counter[int] = Counter()
+    for reference_label, predicted_label in zip(reference, predicted):
+        contingency[(reference_label, predicted_label)] += 1
+        reference_counts[reference_label] += 1
+        predicted_counts[predicted_label] += 1
+
+    joint_pairs = sum(_choose_two(count) for count in contingency.values())
+    reference_pairs = sum(_choose_two(count) for count in reference_counts.values())
+    predicted_pairs = sum(_choose_two(count) for count in predicted_counts.values())
+    total_pairs = _choose_two(len(reference))
+    expected = reference_pairs * predicted_pairs / total_pairs
+    maximum = 0.5 * (reference_pairs + predicted_pairs)
+    denominator = maximum - expected
+    if denominator == 0.0:
+        return 1.0
+    return (joint_pairs - expected) / denominator
+
+
+def _choose_two(count: int) -> int:
+    return count * (count - 1) // 2
+
+
+def _validate_kmeans_params(
+    params: dict[str, JSONValue],
+    sample_count: int,
+) -> None:
+    _require_positive_integer(params, "n_clusters")
+    if int(params["n_clusters"]) > sample_count:
+        raise InvalidParameterError("n_clusters cannot exceed the dataset sample count")
+    if params["init"] not in ("random", "k-means++"):
+        raise InvalidParameterError("init must be 'random' or 'k-means++'")
+    _require_positive_integer(params, "n_init")
+    _require_positive_integer(params, "max_iter")
+    tol = params["tol"]
+    if (
+        isinstance(tol, bool)
+        or not isinstance(tol, (int, float))
+        or not math.isfinite(tol)
+        or tol < 0.0
+    ):
+        raise InvalidParameterError("tol must be a non-negative finite number")
+    if not isinstance(params["standardize"], bool):
+        raise InvalidParameterError("standardize must be a boolean")
+
+
+def _require_positive_integer(params: dict[str, JSONValue], name: str) -> None:
+    value = params[name]
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise InvalidParameterError(f"{name} must be a positive integer")

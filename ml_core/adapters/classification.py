@@ -51,6 +51,8 @@ def run_logistic_regression(
             "feature_count": dataset.info.feature_count,
             "iteration_count": model.n_iter,
             "positive_label": 1,
+            "random_state": config.random_state,
+            "test_size": test_size,
         },
     )
 
