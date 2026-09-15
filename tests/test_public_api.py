@@ -39,5 +39,89 @@ class PublicTypeContractTests(unittest.TestCase):
         self.assertEqual(payload["artifacts"][0]["name"], "summary")
 
 
+class DiscoveryAndValidationTests(unittest.TestCase):
+    def test_discovery_only_advertises_runnable_items_in_stable_order(self):
+        ml_core = importlib.import_module("ml_core")
+
+        self.assertEqual(
+            [item.id for item in ml_core.list_models()],
+            ["kmeans.optimized", "logistic_regression.optimized"],
+        )
+        self.assertEqual(
+            [item.id for item in ml_core.list_datasets()],
+            ["seeds", "wdbc"],
+        )
+
+    def test_unknown_model_is_distinct_from_unknown_dataset(self):
+        ml_core = importlib.import_module("ml_core")
+
+        with self.assertRaises(ml_core.UnknownModelError):
+            ml_core.run_experiment(
+                ml_core.ExperimentConfig(model="missing", dataset="wdbc")
+            )
+        with self.assertRaises(ml_core.UnknownDatasetError):
+            ml_core.run_experiment(
+                ml_core.ExperimentConfig(
+                    model="logistic_regression.optimized",
+                    dataset="missing",
+                )
+            )
+
+    def test_incompatible_model_and_dataset_is_rejected_before_execution(self):
+        ml_core = importlib.import_module("ml_core")
+
+        with self.assertRaises(ml_core.IncompatibleDatasetError):
+            ml_core.run_experiment(
+                ml_core.ExperimentConfig(
+                    model="logistic_regression.optimized",
+                    dataset="seeds",
+                )
+            )
+
+    def test_common_configuration_rejects_ambiguous_values(self):
+        ml_core = importlib.import_module("ml_core")
+
+        invalid_configs = [
+            ml_core.ExperimentConfig(model=1, dataset="wdbc"),
+            ml_core.ExperimentConfig(
+                model="logistic_regression.optimized",
+                dataset="wdbc",
+                params=[],
+            ),
+            ml_core.ExperimentConfig(
+                model="logistic_regression.optimized",
+                dataset="wdbc",
+                random_state=True,
+            ),
+            ml_core.ExperimentConfig(
+                model="logistic_regression.optimized",
+                dataset="wdbc",
+                test_size=1.0,
+            ),
+            ml_core.ExperimentConfig(
+                model="kmeans.optimized",
+                dataset="seeds",
+                test_size=0.2,
+            ),
+        ]
+
+        for config in invalid_configs:
+            with self.subTest(config=config):
+                with self.assertRaises(ml_core.InvalidConfigError):
+                    ml_core.run_experiment(config)
+
+    def test_unknown_model_parameter_is_rejected(self):
+        ml_core = importlib.import_module("ml_core")
+
+        with self.assertRaises(ml_core.InvalidParameterError):
+            ml_core.run_experiment(
+                ml_core.ExperimentConfig(
+                    model="logistic_regression.optimized",
+                    dataset="wdbc",
+                    params={"not_a_parameter": 1},
+                )
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
