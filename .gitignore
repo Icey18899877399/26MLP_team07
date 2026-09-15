@@ -3,6 +3,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .coverage
+dist/
+build/
+*.egg-info/
 .venv/
 venv/
 .idea/

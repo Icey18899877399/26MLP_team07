@@ -122,6 +122,21 @@ class DiscoveryAndValidationTests(unittest.TestCase):
                 )
             )
 
+    def test_every_advertised_model_runs_with_its_default_dataset(self):
+        ml_core = importlib.import_module("ml_core")
+        dataset_ids = {item.id for item in ml_core.list_datasets()}
+
+        for model in ml_core.list_models():
+            with self.subTest(model=model.id):
+                self.assertTrue(set(model.compatible_datasets) <= dataset_ids)
+                result = ml_core.run_experiment(
+                    ml_core.ExperimentConfig(
+                        model=model.id,
+                        dataset=model.compatible_datasets[0],
+                    )
+                )
+                json.dumps(result.to_dict())
+
 
 if __name__ == "__main__":
     unittest.main()
