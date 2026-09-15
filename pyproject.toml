@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ml-core"
+version = "0.1.0"
+description = "Stable experiment API for the repository's machine-learning models"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["ml_core", "Models"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
