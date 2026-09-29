@@ -62,7 +62,7 @@ class DiscoveryAndValidationTests(unittest.TestCase):
         )
         self.assertEqual(
             [item.id for item in ml_core.list_datasets()],
-            ["6_cardio", "23_mammography", "california_housing", "concrete", "seeds", "wdbc"],
+            ["23_mammography", "6_cardio", "california_housing", "concrete", "seeds", "wdbc"],
         )
 
     def test_unknown_model_is_distinct_from_unknown_dataset(self):
