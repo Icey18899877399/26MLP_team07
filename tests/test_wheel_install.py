@@ -21,8 +21,8 @@ class InstalledWheelSmokeTests(unittest.TestCase):
                     run_experiment,
                 )
 
-                self.assertEqual(len(list_models()), 2)
-                self.assertEqual(len(list_datasets()), 2)
+                self.assertEqual(len(list_models()), 12)
+                self.assertEqual(len(list_datasets()), 6)
                 if os.environ.get("ML_CORE_EXPECT_WHEEL") == "1":
                     checkout = Path(__file__).resolve().parents[1]
                     imported_from = Path(ml_core.__file__).resolve()
