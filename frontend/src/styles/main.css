@@ -1,0 +1,35 @@
+/* 全局基础样式 */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: system-ui, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+}
+
+#app {
+  height: 100%;
+}
+
+/* 页面通用容器 */
+.page-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.page-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+/* 图表容器通用类 */
+.chart-box {
+  width: 100%;
+}

@@ -1,4 +1,18 @@
-# ml-core
+# 第 07 组机器学习可视化平台
+
+前端、后端与模型现已统一到本仓库。完整安装、启动、接口映射和限制见 [整合运行说明](docs/FULL_STACK.md)，代码来源见 [SOURCES](docs/SOURCES.md)。
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e . -e "./backend[test]"
+npm --prefix frontend ci
+python scripts/dev.py
+```
+
+打开 http://127.0.0.1:5173，运行逻辑回归/WDBC 或 K-Means/Seeds 真实实验。
+
+## ml-core 公共包
 
 `ml-core` provides a stable experiment API in front of the repository's from-scratch machine-learning implementations. Application code imports from `ml_core` and does not depend on files inside `Models/`.
 
@@ -15,7 +29,7 @@ pip install -e .
 Consumers should pin a release tag or commit instead of following the moving `main` branch:
 
 ```text
-ml-core @ git+https://github.com/Icey18899877399/26MLP_team07.git@v0.1.0
+ml-core @ git+https://github.com/Icey18899877399/26MLP_team07.git@5c1bb06a52e9e542e20bb18a3f0f8d39b16f47ed
 ```
 
 ## Discovery
