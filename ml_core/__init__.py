@@ -1,6 +1,7 @@
 """Stable public entry point for the machine-learning experiment package."""
 
 from .api import list_datasets, list_models, run_experiment
+from .interactive import list_interactive_experiments, run_interactive_experiment
 from .errors import (
     ExperimentExecutionError,
     IncompatibleDatasetError,
@@ -38,6 +39,8 @@ __all__ = [
     "MLCoreError",
     "ModelInfo",
     "run_experiment",
+    "list_interactive_experiments",
+    "run_interactive_experiment",
     "UnknownDatasetError",
     "UnknownModelError",
     "build_original_command",

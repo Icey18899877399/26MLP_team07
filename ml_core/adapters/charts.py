@@ -128,7 +128,7 @@ def clustering_charts(features, labels):
                 for label in sorted(sizes)]}, _axis("样本数"))]
 
 
-def anomaly_charts(targets, scores, predictions, *, protocol):
+def anomaly_charts(targets, scores, predictions, *, protocol, evaluation_label="样本内评估"):
     scores = [float(score) for score in scores]
     low, high = min(scores), max(scores)
     width = (high-low)/20 if high > low else 1.0
@@ -140,13 +140,13 @@ def anomaly_charts(targets, scores, predictions, *, protocol):
     cells = [[x, y, sum(int(t) == y and int(p == -1) == x
                        for t, p in zip(targets, predictions))]
              for y in (0, 1) for x in (0, 1)]
-    return [_chart("anomaly_score_distribution", "异常分数分布（样本内评估）",
+    return [_chart("anomaly_score_distribution", f"异常分数分布（{evaluation_label}）",
         protocol + "分数越大越异常；按真实标签分组，统计全部样本。横轴为等宽分箱。",
         [{"name": name, "type": "bar", "data": group}
          for name, group in zip(("真实正常", "真实异常"), groups)],
         {"type": "category", "name": "异常分数", "data": bins,
          "axisLabel": {"rotate": 35, "interval": 3}}, _axis("样本数")),
-        _chart("anomaly_confusion_matrix", "异常检测混淆矩阵（样本内评估）",
+        _chart("anomaly_confusion_matrix", f"异常检测混淆矩阵（{evaluation_label}）",
             protocol + "使用模型实际判定阈值；横轴预测类别，纵轴真实类别。",
             [{"name": "样本数", "type": "heatmap", "data": cells, "label": {"show": True}}],
             {"type": "category", "name": "预测类别", "nameLocation": "middle", "nameGap": 30,

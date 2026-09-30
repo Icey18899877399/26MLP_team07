@@ -59,6 +59,7 @@ try {
   await page.keyboard.press('Escape')
 
   const submitted = page.waitForResponse(response => response.url().endsWith('/api/original-runs') && response.request().method() === 'POST')
+  await page.locator('.original-reproduction-details > summary').click()
   await page.getByRole('button', { name: '启动原实验', exact: true }).click()
   const response = await submitted
   assert.equal(response.status(), 202)

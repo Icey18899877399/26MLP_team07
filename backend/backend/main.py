@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.integration.ml_backend import MLBackend, PackageMLBackend
 from backend.interaction.routes import router
 from backend.interaction.original_routes import router as original_router
+from backend.interaction.interactive_routes import router as interactive_router
 from backend.integration.original_jobs import OriginalJobManager
 from backend.interaction.validation import chinese_validation_error_handler
 from backend.settings import Settings
@@ -72,6 +73,7 @@ def create_app(
     )
     app.include_router(router)
     app.include_router(original_router)
+    app.include_router(interactive_router)
     return app
 
 

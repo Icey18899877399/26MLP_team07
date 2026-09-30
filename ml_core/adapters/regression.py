@@ -36,6 +36,7 @@ def _fit_evaluate_regressor(
     *,
     extra_kwargs: dict[str, JSONValue] | None = None,
     metadata_extra: Callable[[object], dict[str, JSONValue]] | None = None,
+    train_cap: int | None = _REGRESSION_TRAIN_CAP,
 ) -> ExperimentResult:
     """回归共享骨架：随机切分 → fit → predict → 回归指标 → 结果组装。"""
 
@@ -47,7 +48,7 @@ def _fit_evaluate_regressor(
     )
     training_available_count = len(train_indices)
     # plain_split already shuffled all indices deterministically before splitting.
-    train_indices = train_indices[:_REGRESSION_TRAIN_CAP]
+    train_indices = train_indices[:train_cap]
     train_features = [dataset.features[index] for index in train_indices]
     train_targets = [float(dataset.targets[index]) for index in train_indices]
     test_features = [dataset.features[index] for index in test_indices]
@@ -61,12 +62,16 @@ def _fit_evaluate_regressor(
     metadata: dict[str, JSONValue] = {
         "train_sample_count": len(train_indices),
         "training_available_count": training_available_count,
-        "train_sample_cap": _REGRESSION_TRAIN_CAP,
+        "train_sample_cap": train_cap,
         "test_sample_count": len(test_indices),
         "feature_count": dataset.info.feature_count,
         "random_state": config.random_state,
         "test_size": test_size,
-        "evaluation_protocol": "random_holdout：随机留出测试集，训练子集最多 2000 条；预处理仅在训练集拟合，指标使用全部测试样本",
+        "evaluation_protocol": (
+            "random_holdout：随机留出测试集，训练集完整使用；预处理仅在训练集拟合，指标使用全部测试样本"
+            if train_cap is None else
+            f"random_holdout：随机留出测试集，训练子集最多 {train_cap} 条；预处理仅在训练集拟合，指标使用全部测试样本"
+        ),
         "visualizations": regression_charts(test_targets, predictions) + loss_charts(
             model, target_standardized=bool(effective_params.get("standardize_target", False))
         ),
