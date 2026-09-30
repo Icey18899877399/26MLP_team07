@@ -53,6 +53,7 @@ export const useConnectionStore = defineStore('connection', () => {
   let pollTimer = null
   let healthInFlight = null
   let endpointGeneration = 0
+  let originalOnly = false
 
   // ---------- 计算属性 ----------
   const isUsingFallback = computed(() => registry.value.server.name === fallbackRegistry.server.name)
@@ -78,7 +79,8 @@ export const useConnectionStore = defineStore('connection', () => {
 
   // ---------- 动作 ----------
   /** 应用启动时调用一次：读设置、启动健康轮询 */
-  function init() {
+  function init(options = {}) {
+    originalOnly = options.originalOnly === true
     if (pollTimer) clearInterval(pollTimer)
     httpClient.setBaseUrl(baseUrl.value)
     checkHealth()
@@ -98,7 +100,7 @@ export const useConnectionStore = defineStore('connection', () => {
       if (resp?.ml_backend?.available === true) {
         const wasConnected = status.value === 'connected'
         transitionTo('connected', { level: 'info', message: '已连接后端服务器' })
-        if (!wasConnected || isUsingFallback.value) await refreshRegistry(generation)
+        if (!originalOnly && (!wasConnected || isUsingFallback.value)) await refreshRegistry(generation)
       } else {
         const detail = resp?.ml_backend?.detail
         transitionTo('unavailable', {
@@ -153,7 +155,7 @@ export const useConnectionStore = defineStore('connection', () => {
   /** 手动刷新（badge 刷新按钮）：健康检查，成功时连带刷新注册表 */
   async function refreshAll() {
     await checkHealth()
-    if (status.value === 'connected') await refreshRegistry()
+    if (!originalOnly && status.value === 'connected') await refreshRegistry()
   }
 
   return {

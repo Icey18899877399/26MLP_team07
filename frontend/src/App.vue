@@ -1,29 +1,39 @@
 <script setup>
-import { onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { useConnectionStore } from './stores/connection'
+import { useConnectionStore } from './stores/connection.js'
 import ConnectionBadge from './components/common/ConnectionBadge.vue'
+
 const route = useRoute()
 const conn = useConnectionStore()
-onMounted(() => conn.init())
+const collapsed = ref(false)
+const mobileOpen = ref(false)
+const nav = [
+  { path: '/experiment', title: '原实验图谱', icon: 'DataAnalysis' },
+  { path: '/benchmark', title: '复现历史', icon: 'Clock' },
+  { path: '/datasets', title: '原始数据目录', icon: 'Collection' },
+  { path: '/manual', title: '使用说明', icon: 'Document' }
+]
+const current = computed(() => nav.find(item => item.path === route.path) || nav[0])
+conn.init({ originalOnly: true })
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="app-header">
-      <router-link to="/experiment" class="app-logo"><span class="logo-mark"><el-icon><DataAnalysis /></el-icon></span><div>ML 实验室<small>机器学习理论与实践 · TEAM 07</small></div></router-link>
-      <el-menu :default-active="route.path" router mode="horizontal" :ellipsis="false" class="app-menu">
-        <el-menu-item index="/experiment">实验工作台</el-menu-item><el-menu-item index="/benchmark">算法对比</el-menu-item><el-menu-item index="/datasets">数据集</el-menu-item><el-menu-item index="/manual">使用手册</el-menu-item>
-      </el-menu><ConnectionBadge />
-    </header>
-    <main class="app-main"><router-view /></main>
-    <footer class="app-footer"><span>TEAM 07 · 机器学习实验平台</span><span>从参数到结果，理解每一个模型</span></footer>
+  <div class="app-shell" :class="{ 'nav-collapsed': collapsed, 'mobile-open': mobileOpen }">
+    <aside class="app-sidebar">
+      <router-link class="brand" to="/experiment" @click="mobileOpen = false"><span class="brand-mark">M</span><span class="brand-copy"><strong>ML 实验室</strong><small>TEAM 07 · ORIGINAL WORK</small></span></router-link>
+      <div class="nav-section-title">工作空间</div>
+      <nav aria-label="主导航"><router-link v-for="item in nav" :key="item.path" :to="item.path" class="nav-link" :aria-label="item.title" :class="{ active: route.path === item.path }" @click="mobileOpen = false"><el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span></router-link></nav>
+      <div class="sidebar-spacer" />
+      <div class="sidebar-note"><span class="note-dot" />原始实验 · 真实产物</div>
+      <button class="collapse-button" type="button" :aria-label="collapsed ? '展开侧栏' : '折叠侧栏'" @click="collapsed = !collapsed"><el-icon><DArrowLeft v-if="!collapsed" /><DArrowRight v-else /></el-icon><span>折叠侧栏</span></button>
+    </aside>
+    <div v-if="mobileOpen" class="mobile-scrim" @click="mobileOpen = false" />
+    <div class="app-body">
+      <header class="app-topbar"><div class="topbar-left"><button class="mobile-menu-button" type="button" aria-label="打开导航" @click="mobileOpen = true"><el-icon><Menu /></el-icon></button><el-breadcrumb separator="/"><el-breadcrumb-item>机器学习实践</el-breadcrumb-item><el-breadcrumb-item>{{ current.title }}</el-breadcrumb-item></el-breadcrumb></div><div class="topbar-right"><span class="topbar-caption">原图与完整复现</span><ConnectionBadge /></div></header>
+      <div class="page-tabs"><router-link v-for="item in nav" :key="item.path" :to="item.path" :class="{ active: route.path === item.path }">{{ item.title }}</router-link></div>
+      <main class="app-main"><router-view /></main>
+      <footer class="app-footer">TEAM 07 · 机器学习理论与实践 <span>原始实验协议由项目绘图脚本定义</span></footer>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.app-shell{min-height:100vh;display:flex;flex-direction:column}.app-header{height:78px;padding:0 max(30px,calc((100vw - 1450px)/2));display:flex;align-items:center;justify-content:space-between;gap:25px;border-bottom:1px solid #e5eee8;background:#fff}
-.app-logo{display:flex;align-items:center;gap:11px;text-decoration:none;color:#216a4e;font-weight:750;font-size:20px;white-space:nowrap}.app-logo small{display:block;font-size:9px;color:#8a9c90;font-weight:500;letter-spacing:1px;margin-top:3px}.logo-mark{width:38px;height:38px;border-radius:11px;background:#25855e;color:white;display:grid;place-items:center;font-size:23px}
-.app-menu{border:0;height:77px;--el-menu-horizontal-height:77px;background:transparent}.app-menu .el-menu-item{font-size:14px;padding:0 22px}.app-main{width:100%;max-width:1450px;padding:30px;margin:0 auto;flex:1}.app-footer{padding:22px max(30px,calc((100vw - 1390px)/2));background:#ecf5ef;color:#81978a;display:flex;justify-content:space-between;font-size:11px;gap:15px}
-@media(max-width:900px){.app-header{height:auto;flex-wrap:wrap;padding:15px 20px 0;gap:12px}.app-menu{order:3;width:100%;height:50px;--el-menu-horizontal-height:50px;justify-content:center}.app-logo{font-size:17px}.app-main{padding:18px}.app-menu .el-menu-item{padding:0 17px}.app-footer{padding:20px}}
-</style>

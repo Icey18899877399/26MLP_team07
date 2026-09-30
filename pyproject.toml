@@ -8,13 +8,18 @@ version = "0.1.0"
 description = "Stable experiment API for the repository's machine-learning models"
 requires-python = ">=3.11"
 readme = "README.md"
-dependencies = []
+dependencies = ["matplotlib>=3.8", "numpy>=1.26"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["ml_core", "Models"]
+packages = ["ml_core", "Models", "visualization"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"data" = "ml_core/resources/original/data"
+"figures" = "ml_core/resources/original/figures"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["integration: smoke tests that require the real ml_core package"]

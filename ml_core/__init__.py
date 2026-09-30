@@ -11,6 +11,17 @@ from .errors import (
     UnknownModelError,
 )
 from .types import ArtifactInfo, DatasetInfo, ExperimentConfig, ExperimentResult, ModelInfo
+from .original_catalog import (
+    list_original_datasets,
+    list_original_experiments,
+    original_root,
+    resolve_original_asset,
+)
+from .original_runner import (
+    build_original_command,
+    list_original_run_assets,
+    resolve_original_run_asset,
+)
 
 
 __all__ = [
@@ -29,4 +40,11 @@ __all__ = [
     "run_experiment",
     "UnknownDatasetError",
     "UnknownModelError",
+    "build_original_command",
+    "list_original_datasets",
+    "list_original_experiments",
+    "list_original_run_assets",
+    "original_root",
+    "resolve_original_asset",
+    "resolve_original_run_asset",
 ]

@@ -16,7 +16,7 @@ const statusMap = computed(() => ({
   connecting: { type: 'warning', text: '连接中' },
   connected: { type: 'success', text: '已连接' },
   unavailable: { type: 'danger', text: '后端不可用' },
-  offline: { type: 'info', text: '离线（兜底配置）' }
+  offline: { type: 'info', text: '后端离线' }
 }))
 
 const current = computed(() => statusMap.value[conn.status] || statusMap.value.offline)

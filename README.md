@@ -10,11 +10,20 @@ npm --prefix frontend ci
 python scripts/dev.py
 ```
 
-打开 http://127.0.0.1:5173，选择算法、数据集与参数，运行真实训练并查看指标和可视化。
-页面流程参考此前提供的 MLTaskConfig 优秀案例视频；所有结果来自本仓库手写模型，不使用模拟训练数据。
-当前公共目录：12 个优化版算法、6 个数据集，覆盖分类、回归、聚类、异常检测。已同步同学三个 PR 的代码，具体来源提交见 [SOURCES](docs/SOURCES.md)。
+打开 http://127.0.0.1:5173，按算法查看原有六图，或提交一次完整原实验复现。
+界面布局主要参考 Geeker Admin；实验内容以本项目原始 `visualization/`、`data/`、`figures/` 为准，不使用模板 Mock 或队友测试配置。
+
+- **原有成果**：12 个算法的 72 张原图，18 个已有绘图源数据 CSV，支持放大和下载。
+- **重新训练**：调用对应原脚本，保留原数据、划分、种子、调参、交叉验证、消融和基础版/优化版比较；不是仅训练一个优化版模型。
+- **结果隔离**：原图保持不动，新结果存入独立运行目录。历史成果不冒充本次训练结果。
+- **数据来源**：原目录共有 7 组数据，其中 5 组用于当前原始六图流程；Adult 与 California Housing 保留为原项目存档，不自动替换实验输入。
+- **真实状态**：后台串行任务、日志、运行记录与刷新恢复；不展示虚构的逐轮百分比。
+
+运行说明、原实验 HTTP 接口和限制见 [FULL_STACK](docs/FULL_STACK.md)，原实验协议索引见 [ORIGINAL_EXPERIMENTS](docs/ORIGINAL_EXPERIMENTS.md)。
 
 ## ml-core 公共包
+
+> 下方 `ExperimentConfig/run_experiment` 是保留兼容的单次训练 API，**不是当前前端的原实验复现入口**。原实验目录通过 `list_original_experiments()` 和 `list_original_datasets()` 获取；前端调用 `/api/original-*`。不要用下方示例参数覆盖原脚本的实验协议。
 
 `ml-core` provides a stable experiment API in front of the repository's from-scratch machine-learning implementations. Application code imports from `ml_core` and does not depend on files inside `Models/`.
 

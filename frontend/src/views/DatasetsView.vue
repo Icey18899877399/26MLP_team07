@@ -1,18 +1,22 @@
 <script setup>
-import { computed } from 'vue'
-import { useConnectionStore } from '../stores/connection'
-import { taskNames } from '../config/teaching'
+import { computed, nextTick, onMounted, watch } from 'vue'
+import { useConnectionStore } from '../stores/connection.js'
+import { useOriginalExperimentsStore } from '../stores/originalExperiments.js'
+
 const conn = useConnectionStore()
-const datasets = computed(() => conn.registry.datasets || [])
-const descriptions = {wdbc:'乳腺癌诊断数据，以细胞核的形态特征区分良性与恶性样本。',seeds:'小麦种子形态数据，用于观察无监督算法能否发现不同种子类型。',concrete:'混凝土配合比与龄期数据，预测连续的抗压强度。',california_housing:'加州房屋统计数据，学习地区特征与房价之间的关系。','6_cardio':'心电图特征异常检测数据，分析少数异常样本与正常样本的分布差异。','23_mammography':'乳腺影像特征异常检测数据，关注不平衡条件下的异常检出能力。'}
-function compatible(ds) { return conn.registry.algorithms.filter(a => a.taskTypes.includes(ds.taskType) && (!a.compatibleDatasets?.length || a.compatibleDatasets.includes(ds.id))) }
+const store = useOriginalExperimentsStore()
+const active = computed(() => store.datasets.filter(item => !item.archived_only))
+const archived = computed(() => store.datasets.filter(item => item.archived_only))
+const name = id => store.experiments.find(item => item.id === id)?.title || id
+async function reload() { await Promise.all([store.loadDatasets(), store.loadCatalog()]) }
+watch(() => conn.baseUrl, async () => { await nextTick(); reload() })
+onMounted(reload)
 </script>
 
 <template>
-  <section class="workspace-hero"><div><div class="eyebrow">DATA COLLECTION</div><h1>可用数据集</h1><p>覆盖分类、回归、聚类与异常检测，样本规模以当前后端注册表为准。</p></div><el-tag v-if="conn.isUsingFallback" type="warning">离线配置预览</el-tag></section>
-  <div class="dataset-grid"><article v-for="ds in datasets" :key="ds.id" class="page-card"><div class="section-heading"><el-tag effect="plain">{{ taskNames[ds.taskType] }}</el-tag><span class="eyebrow">{{ ds.id }}</span></div><h2>{{ ds.name }}</h2><p>{{ descriptions[ds.id] || ds.description }}</p><div class="data-stats"><div><strong>{{ ds.nSamples.toLocaleString() }}</strong><span>样本数量</span></div><div><strong>{{ ds.nFeatures }}</strong><span>特征维度</span></div></div><div class="compatible"><span>支持的算法</span><div><el-tag v-for="algo in compatible(ds)" :key="algo.id" size="small" type="info" effect="plain">{{ algo.name }}</el-tag></div></div><p class="dataset-tip">{{ ds.taskType === 'anomaly_detection' ? '评估包含拟合样本，结果用于课程实验分析。' : ds.taskType === 'clustering' ? '全量聚类；已有类别标签仅用于外部评价。' : '预处理仅在训练集上拟合，测试集用于留出评估。' }}</p></article></div>
+  <section class="page-intro"><div><div class="eyebrow">ORIGINAL DATA DIRECTORY</div><h1>原始数据目录</h1><p>按原绘图脚本实际使用情况展示数据。目录中的存档文件不会被当作可替换输入。</p></div><el-button @click="reload"><el-icon><Refresh /></el-icon>刷新目录</el-button></section>
+  <el-alert v-if="store.datasetsError" :title="store.datasetsError" type="error" :closable="false" class="page-alert" />
+  <section class="page-card dataset-section" v-loading="store.datasetsLoading"><div class="card-title-row"><div><div class="eyebrow">USED BY ORIGINAL SCRIPTS</div><h2>实验实际使用</h2></div><span class="section-side-note">{{ active.length }} 个目录条目</span></div><div v-if="active.length" class="original-dataset-grid"><article v-for="dataset in active" :key="dataset.id" class="original-dataset-card"><div class="dataset-card-title"><h3>{{ dataset.name }}</h3><el-tag type="success" effect="plain" size="small">实际使用</el-tag></div><code>{{ dataset.id }}</code><div class="dataset-paths"><span>原始路径</span><code v-for="path in dataset.paths || []" :key="path">{{ path }}</code></div><div class="dataset-used"><span>相关原实验</span><div><router-link v-for="id in dataset.used_by || []" :key="id" :to="{ path: '/experiment', query: { experiment: id } }">{{ name(id) }}</router-link><span v-if="!dataset.used_by?.length">原脚本内部使用</span></div></div></article></div><el-empty v-else-if="!store.datasetsError" description="暂无原始数据条目" :image-size="80" /></section>
+  <section class="page-card dataset-section archive-datasets"><div class="card-title-row"><div><div class="eyebrow">ARCHIVED IN REPOSITORY</div><h2>目录存档</h2></div><span class="section-side-note">{{ archived.length }} 个目录条目</span></div><p class="section-hint">Adult、California 等文件保存在原项目目录中。它们不是对应实验脚本当前使用的数据，完整复现不会用这些文件替换脚本输入。</p><div class="original-dataset-grid"><article v-for="dataset in archived" :key="dataset.id" class="original-dataset-card"><div class="dataset-card-title"><h3>{{ dataset.name }}</h3><el-tag type="info" effect="plain" size="small">仅存档</el-tag></div><code>{{ dataset.id }}</code><div class="dataset-paths"><span>存档路径</span><code v-for="path in dataset.paths || []" :key="path">{{ path }}</code></div></article></div></section>
+  <section class="page-card"><div class="card-title-row"><div><div class="eyebrow">SCRIPT-GENERATED SAMPLES</div><h2>合成数据与机制演示</h2></div></div><p class="section-hint">部分原图通过脚本现场生成二维示意样本，解释邻域、密度、决策边界或异常分数。此类图像没有独立的仓库数据文件；复现时仍执行原脚本的生成步骤。</p></section>
 </template>
-
-<style scoped>
-.dataset-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.page-card{margin-bottom:0;display:flex;flex-direction:column}h2{font-size:19px;margin:0 0 10px}p{font-size:13px;line-height:1.9;color:#7b9183}.data-stats{display:flex;gap:38px;padding:16px 0}.data-stats>div{display:flex;flex-direction:column;gap:7px}.data-stats strong{font-size:27px;color:#347654;font-weight:550}.data-stats span,.compatible>span{font-size:11px;color:#90a395}.compatible{padding-top:17px;border-top:1px solid #e7eee9;margin-top:auto}.compatible>div{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}.dataset-tip{font-size:11px;margin-bottom:0}@media(max-width:1150px){.dataset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.dataset-grid{grid-template-columns:1fr}}
-</style>

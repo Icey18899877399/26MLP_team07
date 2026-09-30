@@ -1,5 +1,13 @@
 # 上游来源
 
+## 当前有效的实验来源（2026-09-30 更正）
+
+用户确认：原图展示 + 原实验完整复现。当前主要页面使用用户原始 `visualization/`、`data/`、`figures/`，不使用下方队友 PR 的测试数据配置与单次训练默认值。原 `Models/` 不修改。此前通用 ECharts 接入没有覆盖原实验的六图、消融与基准，现不再作为前端主流程。
+
+界面主要参考 [Geeker Admin](https://github.com/HalseySpicy/Geeker-Admin) 的管理工作台布局、侧栏、页签和卡片层次；在现有 Vue/Element Plus 上实现，不导入其 Mock 接口、示例指标或业务数据。引用仅为视觉参考，不将整个框架或其示例图作为本项目成果。
+
+原实验逐项索引见 [ORIGINAL_EXPERIMENTS.md](ORIGINAL_EXPERIMENTS.md)。以下保留历史代码来源记录，不表示仍采用队友的实验协议。
+
 本次将团队提供的代码快照整合进 Icey18899877399/26MLP_team07，不修改队友仓库。
 
 | 组件 | 来源 | 导入提交 |

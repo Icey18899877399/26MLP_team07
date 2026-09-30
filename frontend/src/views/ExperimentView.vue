@@ -1,139 +1,90 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
-import { useConnectionStore } from '../stores/connection'
-import { useTrainingStore } from '../stores/training'
-import { CONFIG } from '../config'
-import { formatDuration } from '../utils/format'
-import { algorithmNotes, metricDefinition, taskNames } from '../config/teaching'
-import { downloadJson } from '../utils/download'
-import AlgorithmList from '../components/experiment/AlgorithmList.vue'
-import HyperparamForm from '../components/experiment/HyperparamForm.vue'
-import RunMonitor from '../components/experiment/RunMonitor.vue'
-import MetricCard from '../components/metrics/MetricCard.vue'
-import ChartGallery from '../components/charts/ChartGallery.vue'
-import JsonFallback from '../components/metrics/JsonFallback.vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useConnectionStore } from '../stores/connection.js'
+import { useOriginalExperimentsStore } from '../stores/originalExperiments.js'
+import { originalTaskNames, originalTaskOrder, originalModelNotes } from '../config/originalTeaching.js'
+import OriginalFigureGallery from '../components/original/OriginalFigureGallery.vue'
+import OriginalRunCard from '../components/original/OriginalRunCard.vue'
+import { createRunLinkResolver } from '../utils/originalSelection.js'
 
+const route = useRoute()
+const router = useRouter()
 const conn = useConnectionStore()
-const training = useTrainingStore()
-const selectedAlgo = ref(null)
-const selectedDatasetId = ref('')
-const initialValues = ref(null)
-const split = ref({testSize: CONFIG.defaultTestSize, seed: CONFIG.defaultSeed})
-const algorithms = computed(() => conn.registry.algorithms || [])
-const datasets = computed(() => conn.registry.datasets || [])
-const availableDatasets = computed(() => datasets.value.filter(d => selectedAlgo.value?.taskTypes?.includes(d.taskType) &&
-  (!selectedAlgo.value.compatibleDatasets?.length || selectedAlgo.value.compatibleDatasets.includes(d.id))))
-const selectedDataset = computed(() => datasets.value.find(d => d.id === selectedDatasetId.value))
-const notes = computed(() => algorithmNotes(selectedAlgo.value?.id || ''))
-watch(algorithms, list => { selectedAlgo.value = list.find(a => a.id === selectedAlgo.value?.id) || list[0] || null }, {immediate: true})
-watch(() => selectedAlgo.value?.id, () => {
-  initialValues.value = null
-  selectedDatasetId.value = availableDatasets.value[0]?.id || ''
-  split.value = {testSize: CONFIG.defaultTestSize, seed: CONFIG.defaultSeed}
-}, {immediate: true})
-watch(availableDatasets, list => {
-  if (!list.some(d => d.id === selectedDatasetId.value)) selectedDatasetId.value = list[0]?.id || ''
+const store = useOriginalExperimentsStore()
+const task = ref('classification')
+const resultTab = ref('archive')
+const selectedRunId = ref('')
+const runLink = createRunLinkResolver()
+let pendingExperimentId = ''
+const grouped = computed(() => store.experiments.filter(item => item.task === task.value))
+const currentRuns = computed(() => store.runs.filter(run => run.experiment_id === store.selectedId))
+const selectedRun = computed(() => currentRuns.value.find(run => run.run_id === selectedRunId.value) || currentRuns.value[0] || null)
+const note = computed(() => originalModelNotes[store.selectedId] || '查看原实验中的模型行为、评价结果及绘图过程。')
+const canRunMessage = computed(() => {
+  if (store.catalogError) return '无法读取原实验目录，请检查后端服务后重试。'
+  if (conn.status === 'offline') return '后端未连接，暂不能运行完整原实验。'
+  if (conn.status === 'unavailable') return '后端算法模块不可用，暂不能运行完整原实验。'
+  if (conn.status !== 'connected') return '正在连接后端服务…'
+  if (store.activeRunIds.length) return '已有原实验在排队或运行；后台按顺序执行。'
+  return ''
 })
-function handleTrain(params) {
-  if (!selectedAlgo.value || !selectedDataset.value || training.activeRuns.length) return
-  training.startRun({modelId: selectedAlgo.value.id, modelName: selectedAlgo.value.name,
-    datasetId: selectedDataset.value.id, datasetName: selectedDataset.value.name,
-    taskType: selectedDataset.value.taskType, params, testSize: split.value.testSize, randomState: split.value.seed})
+
+function clearRouteSelection() {
+  runLink.cancel()
+  pendingExperimentId = ''
+  if (route.query.run || route.query.experiment) router.replace({ query: { ...route.query, run: undefined, experiment: undefined } })
 }
-const selectedRunId = ref(training.history[0]?.runId || '')
-const selectedRun = computed(() => training.history.find(run => run.runId === selectedRunId.value))
-watch(() => training.history[0]?.runId, id => { selectedRunId.value = id || '' })
-const visibleMetrics = computed(() => Object.entries(selectedRun.value?.result?.metrics || {})
-  .filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
-  .map(([id]) => conn.registry.metrics?.[selectedRun.value.taskType]?.find(metric => metric.id === id) || metricDefinition(id)))
-const resultMetadata = computed(() => {
-  const {visualizations, ...rest} = selectedRun.value?.result?.metadata || {}
-  return rest
-})
-const gatingMessage = computed(() => conn.lastError || ({offline: '后端未连接，当前为离线配置预览。启动后端后点击右上角刷新。', unavailable: '后端可达，但算法模块尚不可用。', connecting: '正在连接后端并读取模型与数据集…'})[conn.status] || '正在读取真实模型配置…')
-async function reproduce(run) {
-  const algorithm = algorithms.value.find(a => a.id === run.modelId)
-  if (!algorithm) { conn.addLog('warn', '当前后端未提供该历史模型，无法载入配置'); return }
-  selectedAlgo.value = algorithm
-  await nextTick()
-  if (!availableDatasets.value.some(d => d.id === run.datasetId)) { conn.addLog('warn', '当前模型已不支持该历史数据集'); return }
-  selectedDatasetId.value = run.datasetId
-  split.value = {testSize: run.testSize ?? CONFIG.defaultTestSize, seed: run.randomState ?? CONFIG.defaultSeed}
-  initialValues.value = {...run.params}
-  document.getElementById('configuration')?.scrollIntoView({behavior: 'smooth', block: 'start'})
+function selectExperiment(item) {
+  clearRouteSelection()
+  store.selectedId = item.id
+  selectedRunId.value = ''
+  resultTab.value = 'archive'
 }
+function selectTask(key) {
+  task.value = key
+  const first = store.experiments.find(item => item.task === key)
+  if (first) selectExperiment(first)
+}
+async function startRun() {
+  const run = await store.startRun()
+  if (run) { clearRouteSelection(); selectedRunId.value = run.run_id; resultTab.value = 'run' }
+}
+async function reload() { await Promise.all([store.loadCatalog(), store.loadRuns()]) }
+watch(() => store.selectedExperiment?.task, value => { if (value) task.value = value })
+watch(() => conn.baseUrl, async () => { await nextTick(); reload() })
+function resolveRouteSelection() {
+  const run = runLink.take(store.runs)
+  if (run) { store.selectedId = run.experiment_id; selectedRunId.value = run.run_id; resultTab.value = 'run'; pendingExperimentId = '' }
+  else if (pendingExperimentId && store.experiments.some(item => item.id === pendingExperimentId)) {
+    store.selectedId = pendingExperimentId
+    selectedRunId.value = ''
+    resultTab.value = 'archive'
+    pendingExperimentId = ''
+  }
+}
+watch([() => route.query.run, () => route.query.experiment], ([runId, experimentId]) => {
+  runLink.setPending(runId)
+  pendingExperimentId = typeof experimentId === 'string' ? experimentId : ''
+  resolveRouteSelection()
+}, { immediate: true })
+watch(() => store.runs.map(run => run.run_id).join(','), resolveRouteSelection)
+watch(() => store.experiments, resolveRouteSelection)
+onMounted(reload)
 </script>
 
 <template>
-  <section class="workspace-hero">
-    <div><div class="eyebrow">TEAM 07 · MACHINE LEARNING LAB</div><h1>让每一次实验，都看得见</h1><p>配置算法，运行真实训练，从指标与图表理解模型的行为。</p></div>
-    <div class="hero-stats"><div><strong>{{ algorithms.length }}</strong><span>手写算法</span></div><div><strong>{{ datasets.length }}</strong><span>真实数据集</span></div><div><strong>4</strong><span>学习任务</span></div></div>
-  </section>
-  <div class="experiment-layout">
-    <aside class="panel-left page-card"><div class="section-heading"><h3>算法库</h3><span class="eyebrow">SELECT MODEL</span></div>
-      <AlgorithmList :algorithms="algorithms" :active-id="selectedAlgo?.id" @select="selectedAlgo = $event" />
-      <div class="sidebar-footnote">所有结果由后端算法实际计算。离线模式仅供浏览配置。</div>
-    </aside>
-    <div class="panel-right">
-      <section id="configuration" class="page-card configuration-card">
-        <div class="section-heading"><div><span class="section-number">01</span><h2>参数配置</h2></div><el-tag effect="plain">{{ taskNames[selectedDataset?.taskType] || '选择任务' }}</el-tag></div>
-        <div class="algorithm-intro"><h3>{{ selectedAlgo?.name || '选择算法' }}</h3><p>{{ notes.description }}</p></div>
-        <el-alert v-if="!conn.canRunExperiments" :title="gatingMessage" type="warning" :closable="false" show-icon class="gating-alert" />
-        <el-form label-position="top" class="dataset-form"><div class="dataset-row">
-          <el-form-item label="实验数据集" class="dataset-select"><el-select v-model="selectedDatasetId" aria-label="实验数据集"><el-option v-for="d in availableDatasets" :key="d.id" :label="d.name" :value="d.id" /></el-select></el-form-item>
-          <el-form-item v-if="selectedDataset && ['classification','regression'].includes(selectedDataset.taskType)" label="测试集比例"><el-select v-model="split.testSize" aria-label="测试集比例"><el-option v-for="ratio in [.1,.2,.3,.4,.5]" :key="ratio" :label="`${ratio * 100}% 测试 / ${100-ratio*100}% 训练`" :value="ratio" /></el-select></el-form-item>
-          <el-form-item label="切分随机种子"><el-input-number v-model="split.seed" :min="0" :max="99999" controls-position="right" /></el-form-item>
-        </div></el-form>
-        <div v-if="selectedDataset" class="dataset-facts"><span>{{ selectedDataset.nSamples.toLocaleString() }} 个样本</span><span>{{ selectedDataset.nFeatures }} 个特征</span><span>{{ selectedDataset.taskType === 'classification' ? '分层随机切分' : selectedDataset.taskType === 'regression' ? '随机留出测试' : selectedDataset.taskType === 'clustering' ? '全量无监督聚类' : '拟合样本包含于评估集' }}</span></div>
-        <div class="subsection-label">模型超参数 <span>悬停 ⓘ 查看参数含义；null 表示使用自动策略</span></div>
-        <HyperparamForm :algorithm="selectedAlgo" :initial-values="initialValues" :disabled="!conn.canRunExperiments || !selectedDatasetId || training.activeRuns.length > 0" @submit="handleTrain" />
-        <p class="learning-note"><el-icon><Opportunity /></el-icon>{{ notes.insight }}</p>
-      </section>
-
-      <section class="page-card">
-        <div class="section-heading"><div><span class="section-number">02</span><h2>运行状态</h2></div><el-tag :type="training.activeRuns.length ? 'warning' : 'info'" effect="plain">{{ training.activeRuns.length ? '正在计算' : '等待实验' }}</el-tag></div>
-        <RunMonitor v-for="run in [...training.activeRuns, ...training.errorRuns]" :key="run.id" :run="run" />
-        <p v-if="!training.activeRuns.length && !training.errorRuns.length" class="muted">{{ selectedRun ? '最近一次实验已完成。可调整参数继续训练，或查看下方结果。' : '准备好参数后点击「开始训练」。运行期间显示实际请求状态与耗时。' }}</p>
-        <el-collapse><el-collapse-item title="运行日志（连接与请求事件）" name="logs"><div class="run-log"><div v-for="(line, index) in conn.logLines.slice(-15)" :key="index" :class="`log-${line.level}`"><time>{{ new Date(line.ts).toLocaleTimeString('zh-CN', {hour12:false}) }}</time>{{ line.message }}</div><span v-if="!conn.logLines.length">暂无日志</span></div></el-collapse-item></el-collapse>
-      </section>
-
-      <section class="page-card result-section">
-        <div class="section-heading"><div><span class="section-number">03</span><h2>实验结果</h2></div><el-button v-if="selectedRun" size="small" @click="downloadJson(selectedRun, `experiment-${selectedRun.runId}.json`)">导出完整结果</el-button></div>
-        <div v-if="selectedRun">
-          <div class="result-meta"><el-tag type="success" size="small">已完成</el-tag><strong>{{ selectedRun.modelName }}</strong><span>{{ selectedRun.datasetName }}</span><span>请求耗时 {{ formatDuration(selectedRun.elapsedMs || 0) }}</span></div>
-          <p class="run-identity">{{ selectedRun.runId }}</p>
-          <el-alert v-if="resultMetadata.evaluation_protocol" :title="resultMetadata.evaluation_protocol" :type="selectedRun.taskType === 'anomaly_detection' ? 'warning' : 'info'" :closable="false" class="protocol-alert" />
-          <div class="metric-grid"><MetricCard v-for="metric in visibleMetrics" :key="metric.id" :metric="metric" :value="selectedRun.result.metrics[metric.id]" /></div>
-          <div class="gallery-heading"><h3>可视化分析</h3><span class="muted">图表来自本次运行的真实数据 · 支持放大与图片下载</span></div>
-          <ChartGallery :visualizations="selectedRun.result.metadata?.visualizations || []" />
-          <el-collapse class="result-details"><el-collapse-item title="实际生效参数与评估说明"><div class="metadata-grid"><div><h4>实际生效参数</h4><JsonFallback :value="selectedRun.result.effective_params" /></div><div><h4>评估与数据元信息</h4><JsonFallback :value="resultMetadata" /></div></div></el-collapse-item><el-collapse-item title="全部评价指标"><JsonFallback :value="selectedRun.result.metrics" /></el-collapse-item></el-collapse>
-        </div>
-        <el-empty v-else description="完成第一次训练后，在这里查看指标与图表" :image-size="80" />
-      </section>
-
-      <section class="page-card">
-        <div class="section-heading"><div><span class="section-number">04</span><h2>实验历史</h2></div><div><el-button v-if="training.history.length" text size="small" @click="downloadJson(training.history, 'experiment-history.json')">导出历史</el-button><el-popconfirm title="清除已完成的实验记录？正在运行的实验会保留。" @confirm="training.clearRuns()"><template #reference><el-button :disabled="!training.history.length && !training.errorRuns.length" text size="small">清空历史</el-button></template></el-popconfirm></div></div>
-        <el-table v-if="training.history.length" :data="training.history" row-key="runId" size="small" class="history-table"><el-table-column label="算法 / 数据集" min-width="180"><template #default="{row}"><strong>{{ row.modelName }}</strong><div class="muted">{{ row.datasetName }}</div></template></el-table-column><el-table-column label="完成时间" min-width="130"><template #default="{row}">{{ new Date(row.finishedAt).toLocaleString('zh-CN',{hour12:false}) }}</template></el-table-column><el-table-column label="种子" prop="randomState" width="70" /><el-table-column label="操作" width="165"><template #default="{row}"><el-button text size="small" type="primary" @click="selectedRunId = row.runId">查看</el-button><el-button text size="small" @click="reproduce(row)">载入参数</el-button></template></el-table-column></el-table>
-        <p v-else class="muted">暂无完成的实验。历史仅在当前浏览器保存，可导出 JSON 留存。</p>
-      </section>
+  <section class="page-intro"><div><div class="eyebrow">ORIGINAL EXPERIMENTS / FIGURE ATLAS</div><h1>原实验图谱</h1><p>按原绘图脚本浏览 12 套实验与 72 张历史原图；完整复现会生成独立的新产物。</p></div><div class="intro-counts"><div><strong>{{ store.experiments.length }}</strong><span>原始算法</span></div><div><strong>{{ store.experiments.reduce((sum, item) => sum + (item.figures?.length || 0), 0) }}</strong><span>历史图像</span></div></div></section>
+  <el-alert v-if="store.catalogError" :title="store.catalogError" description="目录加载失败，确认后端地址与服务状态后刷新。" type="error" :closable="false" show-icon class="page-alert"><el-button size="small" @click="reload">重新加载</el-button></el-alert>
+  <div v-if="store.catalogLoading && !store.experiments.length" v-loading="true" class="page-card loading-card">正在读取原实验目录…</div>
+  <div v-else-if="store.experiments.length" class="experiment-shell">
+    <aside class="experiment-selector page-card"><div class="selector-heading"><strong>实验目录</strong><span>选择任务与算法</span></div><div class="task-selector"><button v-for="key in originalTaskOrder" :key="key" type="button" :class="{ active: task === key }" @click="selectTask(key)">{{ originalTaskNames[key] }}<span>{{ store.experiments.filter(item => item.task === key).length }}</span></button></div><div class="selector-divider" /><button v-for="item in grouped" :key="item.id" class="model-option" :data-experiment-id="item.id" type="button" :class="{ active: store.selectedId === item.id }" @click="selectExperiment(item)"><span class="model-option-mark" /><span>{{ item.title }}</span><small>{{ item.figures?.length || 0 }} 图</small></button></aside>
+    <div v-if="store.selectedExperiment" class="experiment-content">
+      <section class="page-card model-overview"><div class="overview-top"><div><div class="eyebrow">{{ originalTaskNames[store.selectedExperiment.task] }} · {{ store.selectedExperiment.id }}</div><h2>{{ store.selectedExperiment.title }}</h2><p>{{ note }}</p></div><span class="script-chip">{{ store.selectedExperiment.script }}</span></div><div class="overview-meta"><div><span>原始数据来源</span><div v-if="store.selectedExperiment.datasets?.length" class="dataset-pills"><span v-for="dataset in store.selectedExperiment.datasets" :key="dataset.id" :title="dataset.path">{{ dataset.name }}</span></div><strong v-else>原脚本生成的合成数据 / 机制演示</strong></div><div><span>历史原图</span><strong>{{ store.selectedExperiment.figures?.length || 0 }} 张 PNG</strong></div><div><span>本实验历史</span><strong>{{ currentRuns.length }} 次复现</strong></div></div></section>
+      <section class="page-card protocol-card"><div class="card-title-row"><div><div class="eyebrow">EXPERIMENT PROTOCOL</div><h2>原实验协议</h2></div><span class="read-only-pill">只读 · 源脚本默认值</span></div><p class="section-hint">复现仅选择实验，不传测试比例、随机种子或替代数据；具体流程由原绘图脚本决定。</p><div class="protocol-columns"><div><h3>脚本参数</h3><dl v-if="Object.keys(store.selectedExperiment.parameters || {}).length" class="parameter-list"><div v-for="(value, key) in store.selectedExperiment.parameters" :key="key"><dt>{{ key }}</dt><dd>{{ typeof value === 'object' ? JSON.stringify(value) : String(value) }}</dd></div></dl><p v-else class="run-muted">采用脚本内定义的默认参数。</p></div><div><h3>实验步骤</h3><ol v-if="store.selectedExperiment.protocol?.length" class="protocol-list"><li v-for="line in store.selectedExperiment.protocol" :key="line">{{ line }}</li></ol><p v-else class="run-muted">请参阅原绘图脚本。</p></div></div></section>
+      <section class="page-card run-launch-card"><div class="card-title-row"><div><div class="eyebrow">FULL REPRODUCTION</div><h2>完整复现</h2></div><el-button type="primary" :loading="store.submitting" :disabled="!store.canRun" @click="startRun">启动原实验</el-button></div><p class="section-hint">后台串行执行完整原脚本。新图写入本次运行的独立目录，原目录和历史原图不会被覆盖。</p><el-alert v-if="canRunMessage" :title="canRunMessage" type="warning" :closable="false" class="run-alert" /><el-alert v-if="store.runError" :title="store.runError" type="error" :closable="false" class="run-alert" /><el-alert v-if="store.runsError" :title="`运行状态刷新失败：${store.runsError}`" type="error" :closable="false" class="run-alert" /><OriginalRunCard v-if="selectedRun" :run="selectedRun" compact /></section>
+      <section class="page-card gallery-section"><div class="card-title-row"><div><div class="eyebrow">FIGURE COLLECTION</div><h2>实验图像</h2></div><span class="section-side-note">点击任一图片可查看原尺寸</span></div><el-tabs v-model="resultTab" class="result-tabs"><el-tab-pane label="历史归档原图" name="archive"><p class="archive-banner">以下图像是项目已有的原始成果，并非本次启动复现所得。</p><OriginalFigureGallery :figures="store.selectedExperiment.figures || []" :source-data="store.selectedExperiment.source_data || []" :experiment-id="store.selectedId" archived /></el-tab-pane><el-tab-pane label="本次复现产物" name="run"><div v-if="currentRuns.length" class="run-picker"><span>选择运行</span><el-select v-model="selectedRunId" placeholder="最近一次运行" clearable><el-option v-for="run in currentRuns" :key="run.run_id" :label="`${run.run_id} · ${run.status}`" :value="run.run_id" /></el-select></div><div v-if="selectedRun"><OriginalRunCard :run="selectedRun" /><p v-if="selectedRun.status !== 'completed'" class="section-hint">本次运行结束后，服务端返回的图像与 CSV 将显示在下方。</p><OriginalFigureGallery v-if="selectedRun.figures?.length" :figures="selectedRun.figures" :source-data="selectedRun.source_data || []" :experiment-id="store.selectedId" /></div><el-empty v-else description="尚无本算法复现记录；启动原实验后可在这里查看新产物" :image-size="80" /></el-tab-pane></el-tabs></section>
     </div>
   </div>
+  <el-empty v-else-if="!store.catalogError" description="后端尚未提供原实验目录" />
 </template>
-
-<style scoped>
-.experiment-layout{display:grid;grid-template-columns:245px minmax(0,1fr);gap:22px;align-items:start}
-.panel-left{position:sticky;top:18px;max-height:calc(100vh - 110px);overflow:auto;padding:18px 12px}
-.panel-right{min-width:0}.panel-left .section-heading{padding:0 8px}.sidebar-footnote{font-size:11px;color:#8a9b91;line-height:1.8;margin:16px 10px 0;border-top:1px solid #edf1ee;padding-top:12px}
-.algorithm-intro h3{margin:0 0 5px;font-size:20px}.algorithm-intro p{font-size:13px;color:#718378;line-height:1.7;margin:0 0 22px}
-.dataset-row{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:18px}.dataset-row .el-select,.dataset-row .el-input-number{width:100%}
-.dataset-facts{display:flex;gap:18px;font-size:12px;color:#658071;background:#f4f9f6;padding:11px 13px;border-radius:7px;margin:-3px 0 20px;flex-wrap:wrap}
-.subsection-label{font-size:13px;font-weight:600;border-top:1px solid #eaf0ec;padding-top:18px;margin-bottom:18px}.subsection-label span{font-size:11px;font-weight:400;color:#94a298;margin-left:12px}
-.learning-note{display:flex;align-items:flex-start;gap:8px;color:#688675;background:#f3f9f5;line-height:1.8;font-size:12px;padding:12px;border-radius:8px;margin:18px 0 0}
-.learning-note .el-icon{margin-top:4px;flex-shrink:0}.gating-alert,.protocol-alert{margin-bottom:18px}
-.run-log{background:#f7faf8;border:1px solid #e8efea;border-radius:8px;padding:12px;font-family:Consolas,monospace;font-size:12px;line-height:2;max-height:230px;overflow:auto}.run-log time{color:#8c9d91;margin-right:15px}.log-error{color:#b6524c}.log-warn{color:#a27b2e}
-.result-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px}.result-meta span{color:#7f8d83}.run-identity{font-family:monospace;color:#9ca99f;font-size:11px;margin:12px 0}
-.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:18px 0 28px}.gallery-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px;flex-wrap:wrap}.gallery-heading h3{margin:0;font-size:16px}
-.result-details{margin-top:18px}.metadata-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.metadata-grid>div{min-width:0}
-@media(max-width:1050px){.experiment-layout{grid-template-columns:215px minmax(0,1fr)}.dataset-row{grid-template-columns:1fr 1fr}.dataset-select{grid-column:1/-1}}
-@media(max-width:760px){.experiment-layout{grid-template-columns:1fr}.panel-left{position:static;max-height:280px}.dataset-row,.metadata-grid{grid-template-columns:1fr}.dataset-select{grid-column:auto}}
-</style>
