@@ -24,6 +24,7 @@ from ._common import (
     require_positive_integer,
 )
 from .charts import anomaly_charts
+from .model_charts import model_charts
 
 # 单类 SVM 的 O(n^2) 核矩阵：训练集（仅正常样本）子采样上限
 _OCSVM_TRAIN_CAP = 300
@@ -85,7 +86,10 @@ def run_isolation_forest(
             "train_sample_count": len(dataset.features),
             "evaluation_protocol": "in_sample：全体样本无监督训练并样本内评估，不代表独立测试性能",
             "visualizations": anomaly_charts(dataset.targets, model.scores_, predictions,
-                protocol="全体样本无监督训练并样本内评估，不代表独立测试性能。"),
+                protocol="全体样本无监督训练并样本内评估，不代表独立测试性能。")
+                + model_charts(config.model, model, train_features=dataset.features,
+                    evaluation_features=dataset.features, scores=model.scores_,
+                    feature_names=getattr(dataset, "feature_names", None)),
             "feature_count": dataset.info.feature_count,
             "threshold": float(model.threshold_),
             "anomaly_rate": round(float(sum(1 for p in predictions if p == -1)) / len(predictions), 8),
@@ -155,7 +159,10 @@ def run_one_class_svm(
             "evaluation_protocol": "in_sample_overlap：使用已知正常标签选择最多 300 个训练样本，全量评估包含训练样本，不是独立测试",
             "visualizations": anomaly_charts(dataset.targets,
                 [-value for value in decisions], predictions,
-                protocol="使用已知正常标签选择最多 300 个训练样本，全量评估包含训练样本，不是独立测试。分数为 decision_function 的相反数。"),
+                protocol="使用已知正常标签选择最多 300 个训练样本，全量评估包含训练样本，不是独立测试。分数为 decision_function 的相反数。")
+                + model_charts(config.model, model, train_features=train_features,
+                    evaluation_features=dataset.features, scores=[-value for value in decisions],
+                    feature_names=getattr(dataset, "feature_names", None)),
             "random_state": config.random_state,
         },
     )

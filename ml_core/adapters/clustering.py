@@ -19,6 +19,7 @@ from ._common import (
     require_positive_integer,
 )
 from .charts import clustering_charts
+from .model_charts import dataset_feature_names, model_charts
 
 
 def adjusted_rand_index(reference: list[int] | tuple[int, ...], predicted: list[int]) -> float:
@@ -76,15 +77,17 @@ def run_kmeans(
         effective_params=dict(effective_params),
         metrics={
             "inertia": float(model.inertia_),
-            "adjusted_rand_index": adjusted_rand_index(dataset.targets, labels),
+            **({"adjusted_rand_index": adjusted_rand_index(dataset.targets, labels)} if dataset.targets else {}),
             "n_clusters": int(model.n_clusters),
         },
         metadata={
             "sample_count": len(dataset.features),
             "feature_count": dataset.info.feature_count,
             "iteration_count": model.n_iter_,
-            "evaluation_protocol": "in_sample：全体样本聚类，真实标签仅用于外部 ARI 评估",
-            "visualizations": clustering_charts(dataset.features, labels),
+            "evaluation_protocol": "in_sample：全体样本聚类；有参考标签时计算外部 ARI，无参考标签时不计算",
+            "visualizations": clustering_charts(dataset.features, labels, feature_names=dataset_feature_names(dataset))
+                + model_charts(config.model, model, train_features=dataset.features, evaluation_features=dataset.features,
+                    predictions=labels, feature_names=dataset_feature_names(dataset)),
             "random_state": config.random_state,
             "cluster_sizes": {
                 str(cluster): cluster_sizes.get(cluster, 0)
@@ -117,13 +120,15 @@ def run_dbscan(
         metrics={
             "n_clusters": int(model.n_clusters_),
             "noise_points": int(sum(1 for label in labels if label == -1)),
-            "adjusted_rand_index": adjusted_rand_index(dataset.targets, labels),
+            **({"adjusted_rand_index": adjusted_rand_index(dataset.targets, labels)} if dataset.targets else {}),
         },
         metadata={
             "sample_count": len(dataset.features),
             "feature_count": dataset.info.feature_count,
-            "evaluation_protocol": "in_sample：全体样本聚类，真实标签仅用于外部 ARI 评估",
-            "visualizations": clustering_charts(dataset.features, labels),
+            "evaluation_protocol": "in_sample：全体样本聚类；有参考标签时计算外部 ARI，无参考标签时不计算",
+            "visualizations": clustering_charts(dataset.features, labels, feature_names=dataset_feature_names(dataset))
+                + model_charts(config.model, model, train_features=dataset.features, evaluation_features=dataset.features,
+                    predictions=labels, feature_names=dataset_feature_names(dataset)),
             "cluster_sizes": {
                 str(cluster): cluster_sizes.get(cluster, 0)
                 for cluster in range(int(model.n_clusters_))

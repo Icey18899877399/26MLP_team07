@@ -5,6 +5,7 @@ const routes = [
   { path: '/experiment', name: 'experiment', component: () => import('../views/ExperimentView.vue'), meta: { title: '原实验图谱' } },
   { path: '/benchmark', name: 'benchmark', component: () => import('../views/BenchmarkView.vue'), meta: { title: '复现历史' } },
   { path: '/datasets', name: 'datasets', component: () => import('../views/DatasetsView.vue'), meta: { title: '原始数据目录' } },
+  { path: '/datasets/:id', name: 'dataset-detail', component: () => import('../views/DatasetDetailView.vue'), meta: { title: '数据集详情与训练' } },
   { path: '/manual', name: 'manual', component: () => import('../views/ManualView.vue'), meta: { title: '使用说明' } }
 ]
 

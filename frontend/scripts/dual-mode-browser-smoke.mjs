@@ -7,7 +7,8 @@ try {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(origin)
-  await page.getByRole('heading', { name: '原实验图谱', exact: true }).waitFor()
+  await page.locator('.task-selector').waitFor()
+  assert.equal(await page.getByRole('heading', { name: '原实验图谱', exact: true }).count(), 0)
   assert.equal(await page.locator('.page-tabs').count(), 0, 'duplicate top navigation must be removed')
   assert.equal(await page.locator('.app-topbar').count(), 0, 'desktop top bar must be removed')
   assert.equal(await page.getByRole('navigation', { name: '主导航' }).count(), 1)

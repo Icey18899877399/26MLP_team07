@@ -43,18 +43,20 @@ def roc_points(targets, scores):
     return points
 
 
-def classification_charts(targets, predictions, probabilities):
+def classification_charts(targets, predictions, probabilities, *, class_names=None):
+    names = list(class_names or ("0", "1"))
+    categories = [f"{name} ({i})" for i, name in enumerate(names)]
     counts = [[x, y, sum(int(t) == y and int(p) == x
                          for t, p in zip(targets, predictions))]
               for y in (0, 1) for x in (0, 1)]
     charts = [_chart("confusion_matrix", "测试集混淆矩阵",
-        "分层留出测试集；横轴为预测类别，纵轴为真实类别。1 为恶性，0 为良性。",
+        f"分层留出测试集；横轴为预测类别，纵轴为真实类别。0 = {names[0]}，1 = {names[1]}。",
         [{"name": "样本数", "type": "heatmap", "data": counts,
           "label": {"show": True}}],
         {"type": "category", "name": "预测类别", "nameLocation": "middle", "nameGap": 30,
-         "data": ["良性 (0)", "恶性 (1)"]},
+         "data": categories},
         {"type": "category", "name": "真实类别", "nameLocation": "middle", "nameGap": 48,
-         "nameRotate": 90, "data": ["良性 (0)", "恶性 (1)"]},
+         "nameRotate": 90, "data": categories},
         visualMap={"min": 0, "max": max(row[2] for row in counts),
                    "calculable": False, "orient": "horizontal", "bottom": 0})]
     points = roc_points(targets, probabilities)
@@ -106,21 +108,23 @@ def loss_charts(model, *, target_standardized=False):
         series, _axis("迭代 / 轮次"), _axis("训练目标损失"))]
 
 
-def clustering_charts(features, labels):
+def clustering_charts(features, labels, *, feature_names=None):
     count = len(features)
-    means = [sum(row[j] for row in features)/count for j in (0, 1)]
-    scales = [math.sqrt(sum((row[j]-means[j])**2 for row in features)/count) or 1
+    names = list(feature_names or [f"特征 {i+1}" for i in range(len(features[0]))])
+    projected = [[row[0], row[1] if len(row) > 1 else 0.0] for row in features]
+    means = [sum(row[j] for row in projected)/count for j in (0, 1)]
+    scales = [math.sqrt(sum((row[j]-means[j])**2 for row in projected)/count) or 1
               for j in (0, 1)]
     series = []
     for label in sorted(set(labels)):
         series.append({"name": "噪声 (-1)" if label == -1 else f"簇 {label}",
             "type": "scatter", "symbolSize": 7,
             "data": [[(row[0]-means[0])/scales[0], (row[1]-means[1])/scales[1]]
-                     for row, cluster in list(zip(features, labels))[:DISPLAY_CAP] if cluster == label]})
+                     for row, cluster in list(zip(projected, labels))[:DISPLAY_CAP] if cluster == label]})
     sizes = Counter(labels)
     return [_chart("cluster_projection", "聚类结果：前两维标准化投影",
-        f"使用全体样本拟合聚类；图中仅显示前两维特征的 z-score 投影（非 PCA、非重新训练），显示 {min(count, DISPLAY_CAP)}/{count} 个样本。聚类使用全部特征，参考标签仅用于 ARI 评估。",
-        series, _axis("种子面积 (z-score)"), _axis("种子周长 (z-score)")),
+        f"使用全体样本拟合聚类；图中仅显示前两维特征的 z-score 投影（非 PCA、非重新训练），单特征时纵轴为 0。显示 {min(count, DISPLAY_CAP)}/{count} 个样本。聚类使用全部特征；有参考标签时才计算 ARI。",
+        series, _axis(names[0] + " (z-score)"), _axis(names[1] + " (z-score)" if len(names) > 1 else "单特征占位 (0)")),
         _chart("cluster_sizes", "簇大小与噪声数量",
             "统计全部样本的预测簇标签；DBSCAN 的 -1 是噪声，不属于任何簇。高噪声比例可能意味着当前 eps 较小。",
             [{"name": "样本数", "type": "bar", "data": [sizes[label] for label in sorted(sizes)]}],

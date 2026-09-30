@@ -19,3 +19,4 @@ node_modules/
 !.env.example
 *.log
 .original-runs/
+.uploaded-datasets/

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import BaseChart from './BaseChart.vue'
 
 const props = defineProps({ visualizations: {type: Array, default: () => []} })
-const charts = computed(() => props.visualizations.filter(chart => chart?.option && typeof chart.option === 'object'))
+const charts = computed(() => props.visualizations.filter(chart => chart?.option && typeof chart.option === 'object').sort((a, b) => Number(b.category === 'model_diagnostic') - Number(a.category === 'model_diagnostic')))
 const selected = ref(null)
 const expanded = ref(false)
 const largeChart = ref(null)

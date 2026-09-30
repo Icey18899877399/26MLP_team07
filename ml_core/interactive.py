@@ -17,6 +17,7 @@ from .adapters import classification as cls, regression as reg, anomaly as ano
 from .adapters._common import (require_non_negative_number, require_positive_integer,
                               require_optional_positive_integer_or_none)
 from .adapters.charts import anomaly_charts
+from .adapters.model_charts import model_charts
 from .datasets import LoadedDataset
 from .errors import (MLCoreError, InvalidConfigError, InvalidParameterError,
                      IncompatibleDatasetError, UnknownModelError, ExperimentExecutionError)
@@ -169,7 +170,9 @@ def _run_anomaly(config, item, selected, params):
             "random_state": config.random_state, "test_size": 0.2,
             "evaluation_protocol": item["protocol"], **extra,
             "visualizations": anomaly_charts(test_y, scores, predictions, protocol=item["protocol"],
-                                             evaluation_label="独立测试集"),
+                                             evaluation_label="独立测试集") + model_charts(config.model, model,
+                train_features=train_x, evaluation_features=test_x, evaluation_targets=test_y,
+                predictions=predictions, scores=scores),
         })
 
 

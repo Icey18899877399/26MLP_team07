@@ -23,6 +23,7 @@ from ._common import (
     require_positive_number,
 )
 from .charts import regression_charts, loss_charts
+from .model_charts import dataset_feature_names, model_charts
 
 # Pure-Python optimizers: bound interactive training, never the held-out evaluation.
 _REGRESSION_TRAIN_CAP = 2000
@@ -74,7 +75,10 @@ def _fit_evaluate_regressor(
         ),
         "visualizations": regression_charts(test_targets, predictions) + loss_charts(
             model, target_standardized=bool(effective_params.get("standardize_target", False))
-        ),
+        ) + model_charts(config.model, model, train_features=train_features,
+            evaluation_features=test_features, train_targets=train_targets,
+            evaluation_targets=test_targets, predictions=predictions,
+            feature_names=dataset_feature_names(dataset)),
     }
     if metadata_extra is not None:
         metadata.update(metadata_extra(model))

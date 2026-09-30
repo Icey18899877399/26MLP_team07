@@ -12,6 +12,8 @@ from backend.integration.ml_backend import MLBackend, PackageMLBackend
 from backend.interaction.routes import router
 from backend.interaction.original_routes import router as original_router
 from backend.interaction.interactive_routes import router as interactive_router
+from backend.interaction.data_routes import router as data_router
+from backend.integration.data_library import DataLibrary
 from backend.integration.original_jobs import OriginalJobManager
 from backend.interaction.validation import chinese_validation_error_handler
 from backend.settings import Settings
@@ -30,6 +32,7 @@ def create_app(
     settings: Settings | None = None,
     original_jobs_dir: Path | None = None,
     original_job_manager: OriginalJobManager | None = None,
+    dataset_upload_dir: Path | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     logging.getLogger("backend").setLevel(resolved_settings.log_level)
@@ -63,6 +66,7 @@ def create_app(
     app.state.original_jobs = original_job_manager
     app.state.original_jobs_dir = jobs_dir
     app.state.original_jobs_lock = threading.Lock()
+    app.state.data_library = DataLibrary(dataset_upload_dir or (_default_original_jobs_dir().parent / ".uploaded-datasets"))
     app.add_exception_handler(RequestValidationError, chinese_validation_error_handler)
     app.add_middleware(
         CORSMiddleware,
@@ -74,6 +78,7 @@ def create_app(
     app.include_router(router)
     app.include_router(original_router)
     app.include_router(interactive_router)
+    app.include_router(data_router)
     return app
 
 

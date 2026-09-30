@@ -25,6 +25,7 @@ from ._common import (
     stratified_split,
 )
 from .charts import classification_charts, loss_charts
+from .model_charts import dataset_feature_names, model_charts
 
 
 def _classification_metrics(
@@ -82,6 +83,7 @@ def _fit_evaluate_classifier(
     # Logistic regression alone documents a fixed [P(0), P(1)] layout.
     class_order = getattr(model, "classes", [0, 1])
     positive_column = list(class_order).index(1)
+    class_names = getattr(dataset, "class_names", None) or (("良性", "恶性") if dataset.info.id == "wdbc" else None)
 
     metadata: dict[str, JSONValue] = {
         "train_sample_count": len(train_indices),
@@ -93,8 +95,12 @@ def _fit_evaluate_classifier(
         "evaluation_protocol": "stratified_holdout：分层留出测试集，预处理仅在训练集拟合",
         "visualizations": classification_charts(
             test_targets, predictions,
-            [row[positive_column] for row in model.predict_proba(test_features)]
-        ) + loss_charts(model),
+            [row[positive_column] for row in model.predict_proba(test_features)],
+            class_names=class_names,
+        ) + loss_charts(model) + model_charts(config.model, model,
+            train_features=train_features, evaluation_features=test_features,
+            train_targets=train_targets, evaluation_targets=test_targets, predictions=predictions,
+            feature_names=dataset_feature_names(dataset), class_names=class_names),
     }
     if metadata_extra is not None:
         metadata.update(metadata_extra(model))

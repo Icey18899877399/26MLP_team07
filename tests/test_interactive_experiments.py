@@ -67,7 +67,10 @@ def test_all_twelve_train_real_original_data_and_return_live_charts(algorithm, p
         assert result.metadata["train_test_overlap_count"] == 0
     if result.task == "anomaly_detection":
         charts = {chart["id"]: chart for chart in result.metadata["visualizations"]}
-        assert all("独立测试集" in chart["title"] and "样本内评估" not in chart["title"] for chart in charts.values())
+        # Evaluation charts identify their partition; fitted support vectors are
+        # training quantities and must not be mislabeled as held-out samples.
+        evaluation_charts = [charts[key] for key in ("anomaly_score_distribution", "anomaly_confusion_matrix")]
+        assert all("独立测试集" in chart["title"] and "样本内评估" not in chart["title"] for chart in evaluation_charts)
         distribution = charts["anomaly_score_distribution"]["option"]["series"]
         cells = charts["anomaly_confusion_matrix"]["option"]["series"][0]["data"]
         assert sum(sum(series["data"]) for series in distribution) == result.metadata["test_sample_count"]

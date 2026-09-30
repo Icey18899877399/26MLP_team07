@@ -56,7 +56,8 @@ class ExperimentChartTests(unittest.TestCase):
                     self.assertEqual(sum(sizes), 210)
                 else:
                     self.assertIn("in_sample", result.metadata["evaluation_protocol"])
-                    self.assertTrue(all("样本内评估" in chart["title"] for chart in charts))
+                    self.assertTrue(all("样本内评估" in by_id[key]["title"]
+                        for key in ("anomaly_score_distribution", "anomaly_confusion_matrix")))
                     series = by_id["anomaly_score_distribution"]["option"]["series"]
                     self.assertEqual(sum(sum(s["data"]) for s in series), result.metadata["sample_count"])
                     self.assertEqual(sum(series[1]["data"]), result.metrics["true_anomalies"])
