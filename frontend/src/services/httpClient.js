@@ -1,29 +1,30 @@
-/** HTTP transport; local events preserve the existing Vue store interface. */
+import { algorithmNotes, metricDefinition } from '../config/teaching.js'
+/** Native HTTP transport; local events preserve the Vue store interface. */
 export function makeRegistry(models, datasets) {
   const hyperparam = (name, value, hints) => {
     const field = { name, label: name, default: value, hint: hints[name], group: '模型参数' }
     if (name === 'init') return { ...field, type: 'choice', options: ['k-means++', 'random'] }
-    if (name === 'class_weight') return { ...field, type: 'choice', default: value ?? 'none', options: ['none', 'balanced'] }
+    if (value === null || Array.isArray(value) || typeof value === 'object') return { ...field, type: 'json' }
     if (typeof value === 'boolean') return { ...field, type: 'bool' }
     if (typeof value === 'number') {
-      const integer = ['max_iter', 'n_init', 'n_clusters'].includes(name)
-      return { ...field, type: integer ? 'int' : 'float', min: integer ? 1 : 0, step: integer ? 1 : 0.00000001 }
+      const integer = Number.isInteger(value) && !/rate|tol|alpha|lambda|gamma|weight|ratio|contamination|^C$/.test(name)
+      return { ...field, type: integer ? 'int' : 'float', step: integer ? 1 : 0.001 }
     }
     return { ...field, type: 'text' }
   }
   const metric = (id, name, higherIsBetter = true) => ({ id, name, type: 'scalar', higherIsBetter })
   return {
     server: { name: 'ML Core 真实实验服务', version: '0.1.0', protocolVersion: 1 },
-    taskTypes: [...new Set(models.map(m => m.task_type))],
-    algorithms: models.flatMap(m => m.variants.map(variant => ({
-      id: m.id + '.' + variant, model: m.id, variant, name: m.name,
-      taskTypes: [m.task_type], compatibleDatasets: m.compatible_datasets,
-      description: '由 ml_core 执行，结果来自真实数据集。',
-      hyperparams: Object.entries(m.parameters).map(([key, value]) => hyperparam(key, value, m.parameter_descriptions || {}))
-    }))),
+    taskTypes: [...new Set(models.map(m => m.task))],
+    algorithms: models.map(m => ({
+      id: m.id, model: m.id, name: m.display_name,
+      family: m.id.split('.')[0], taskTypes: [m.task], compatibleDatasets: m.compatible_datasets,
+      ...algorithmNotes(m.id),
+      hyperparams: Object.entries(m.default_params || {}).map(([key, value]) => hyperparam(key, value, m.parameter_descriptions || {}))
+    })),
     datasets: datasets.map(d => ({
-      id: d.id, name: d.name, taskType: d.task_type, nSamples: d.sample_count, nFeatures: d.feature_count,
-      split: { defaultTestRatio: 0.2, defaultSeed: 42, stratifySupported: d.task_type === 'classification' }
+      id: d.id, name: d.display_name, taskType: d.task, nSamples: d.sample_count, nFeatures: d.feature_count, hasTarget: d.has_target,
+      split: { defaultTestRatio: 0.2, defaultSeed: 42, stratifySupported: d.task === 'classification' }
     })),
     metrics: {
       classification: [
@@ -31,7 +32,9 @@ export function makeRegistry(models, datasets) {
         metric('recall', '召回率'), metric('f1', 'F1'),
         { id: 'confusion_matrix', name: '混淆矩阵', type: 'matrix', chart: 'heatmap' }
       ],
-      clustering: [metric('inertia', '簇内平方和', false), metric('adjusted_rand_index', '调整兰德指数'), metric('n_clusters', '簇数')]
+      clustering: [metric('inertia', '簇内平方和', false), metric('adjusted_rand_index', '调整兰德指数'), metric('n_clusters', '簇数')],
+      regression: ['mse', 'rmse', 'mae', 'r2'].map(metricDefinition),
+      anomaly_detection: ['accuracy', 'precision', 'recall', 'f1', 'roc_auc'].map(metricDefinition)
     }
   }
 }
@@ -44,7 +47,7 @@ export function experimentRequest(payload, registry) {
   const params = { ...payload.hyperparams }
   if (params.class_weight === 'none') params.class_weight = null
   return {
-    model: algorithm.model, variant: algorithm.variant, dataset: payload.datasetId,
+    model: algorithm.id, dataset: payload.datasetId,
     params, random_state: payload.split?.seed ?? 42,
     test_size: algorithm.taskTypes.includes('clustering') ? null : (payload.split?.testRatio ?? 0.2)
   }
@@ -53,12 +56,14 @@ export function resultPayload(request, result, elapsedMs) {
   const metrics = { ...result.metrics }
   if (['tn', 'fp', 'fn', 'tp'].every(k => Number.isFinite(metrics[k]))) {
     metrics.confusion_matrix = [[metrics.tn, metrics.fp], [metrics.fn, metrics.tp]]
-    metrics.class_names = ['良性 (0)', '恶性 (1)']
+    metrics.class_names = result.metadata?.class_names || ['类别 0', '类别 1']
   }
   return {
     runId: request.runId, algorithmId: request.algorithmId, datasetId: request.datasetId,
-    status: 'done', hyperparams: result.diagnostics?.effective_params ?? request.hyperparams,
-    metrics, diagnostics: result.diagnostics, durations: { train_ms: elapsedMs }
+    serverRunId: result.run_id, task: result.task,
+    status: 'done', hyperparams: result.effective_params ?? request.hyperparams,
+    metrics, diagnostics: result.metadata || {}, artifacts: result.artifacts,
+    visualizations: result.metadata?.visualizations || [], durations: { train_ms: elapsedMs }
   }
 }
 export class HttpClient {

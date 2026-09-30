@@ -10,13 +10,14 @@ npm --prefix frontend ci
 python scripts/dev.py
 ```
 
-打开 http://127.0.0.1:5173，运行逻辑回归/WDBC 或 K-Means/Seeds 真实实验。
+打开 http://127.0.0.1:5173，选择算法、数据集与参数，运行真实训练并查看指标和可视化。
+页面流程参考此前提供的 MLTaskConfig 优秀案例视频；所有结果来自本仓库手写模型，不使用模拟训练数据。
 
 ## ml-core 公共包
 
 `ml-core` provides a stable experiment API in front of the repository's from-scratch machine-learning implementations. Application code imports from `ml_core` and does not depend on files inside `Models/`.
 
-The first packaged release supports optimized logistic regression on WDBC and optimized K-Means on Seeds. `list_models()` and `list_datasets()` are the source of truth for the combinations available in an installed version.
+`list_models()` and `list_datasets()` are the source of truth for supported model variants, compatible datasets, defaults and parameter descriptions. The public API is stable while internal model adapters can evolve independently of the frontend.
 
 ## Installation
 
@@ -105,4 +106,4 @@ result = await run_in_threadpool(run_experiment, config)
 return result.to_dict()
 ```
 
-Suggested transport endpoints are `GET /api/experiments/models`, `GET /api/experiments/datasets`, and `POST /api/experiments`. The web layer should map configuration errors to HTTP 422 and unexpected `ExperimentExecutionError` failures to HTTP 500.
+The integrated endpoints are `GET /api/models`, `GET /api/datasets`, and `POST /api/experiments`. Use the full model ID; do not send a separate `variant`. Malformed HTTP requests return 422, domain configuration errors return 400, unavailable packages return 503, and model execution failures return 502. See [HTTP contract](backend/docs/HTTP_API_CONTRACT.md).

@@ -14,7 +14,9 @@
 export function buildFormModel(hyperparams) {
   const model = {}
   for (const p of hyperparams || []) {
-    if (p.type === 'range') {
+    if (p.type === 'json') {
+      model[p.name] = JSON.stringify(p.default)
+    } else if (p.type === 'range') {
       // range 默认值为 [lo, hi]，无默认则取 [min, max]
       model[p.name] = Array.isArray(p.default)
         ? [...p.default]
@@ -31,8 +33,11 @@ export function extractHyperparams(model, hyperparams) {
   const result = {}
   for (const p of hyperparams || []) {
     const value = model[p.name]
-    if (value === undefined || value === null || value === '') continue
-    result[p.name] = value
+    if (value === undefined || value === '') continue
+    if (p.type === 'json') {
+      try { result[p.name] = typeof value === 'string' ? JSON.parse(value) : value }
+      catch { throw new Error(`${p.name} 必须是有效 JSON，例如 null、5、[16, 8] 或 "balanced"`) }
+    } else result[p.name] = value
   }
   return result
 }

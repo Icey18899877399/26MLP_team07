@@ -4,7 +4,7 @@
 
 | 组件 | 来源 | 导入提交 |
 | --- | --- | --- |
-| 后端 | https://github.com/Moonia-Cherry/26MLP_team07_backend | adc416fe08c8487204119e71cde3399a04afc2fd |
+| 后端 | https://github.com/Moonia-Cherry/26MLP_team07_backend | f33e37c121497bcaa97e4502dc518cf53c0de99f |
 | 前端 | https://github.com/diana0103-espuma/26MLP_team07_frontend | 63ec7c1741137da71faf3a0ed6bfb8eca11815c8 |
 | 模型 | https://github.com/Icey18899877399/26MLP_team07 | 5c1bb06a52e9e542e20bb18a3f0f8d39b16f47ed |
 
@@ -12,5 +12,11 @@
 原后端教案 PDF 随后端源码保留。上游说明书中的旧独立仓库命令由整合版说明替代。
 无新增整体许可证；来源记录不改变原作者权利。
 
-改动集中于后端公共 API 适配、前端真实 HTTP 接入、错误显示、数据集/历史页、启动说明及集成测试。
-原 Models/、ml_core/ 算法及现有接口不作修改。
+2026-09-29 更新导入队友后端的原生合同、路由、公共 API 边界和测试；保留本仓库的目录结构、启动器与本地包依赖，不覆盖模型代码。
+前端在原作者 Vue/ECharts 代码基础上扩展算法目录、真实训练和可视化；ml_core 新增原有算法的公共适配器，Models/ 中的手写实现保持不变。
+
+## 课堂优秀案例参考
+
+参考用户此前提供的 `演示视频.mp4`（MLTaskConfig，约 13 分 54 秒），已再次提取关键帧核对。
+借鉴参数配置 → 运行状态 → 指标 → 可放大图表 → 历史记录的演示流程，不复制其项目代码或虚构输出。
+视频及提取帧不上传本仓库；图表均使用本项目实际运行数据。

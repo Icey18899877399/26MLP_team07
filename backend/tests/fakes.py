@@ -1,9 +1,9 @@
 from backend.contracts import (
-    DatasetSpec,
+    DatasetInfo,
     ExperimentConfig,
     ExperimentResult,
     MLBackendStatus,
-    ModelSpec,
+    ModelInfo,
 )
 
 
@@ -17,31 +17,38 @@ class FakeMLBackend:
             detail="test double",
         )
 
-    def list_models(self) -> list[ModelSpec]:
+    def list_models(self) -> list[ModelInfo]:
         return [
-            ModelSpec(
-                id="logistic_regression",
-                name="Logistic Regression",
-                task_type="classification",
-                variants=["base", "optimized"],
-                parameters={"learning_rate": {"type": "number"}},
+            ModelInfo(
+                id="logistic_regression.optimized",
+                display_name="Logistic Regression (Optimized)",
+                task="classification",
+                compatible_datasets=["wdbc"],
+                default_params={"max_iter": 1000},
+                parameter_descriptions={"max_iter": "Maximum iterations"},
             )
         ]
 
-    def list_datasets(self) -> list[DatasetSpec]:
+    def list_datasets(self) -> list[DatasetInfo]:
         return [
-            DatasetSpec(
+            DatasetInfo(
                 id="wdbc",
-                name="Wisconsin Diagnostic Breast Cancer",
-                task_type="classification",
+                display_name="Wisconsin Diagnostic Breast Cancer",
+                task="classification",
+                sample_count=569,
+                feature_count=30,
+                has_target=True,
             )
         ]
 
     def run_experiment(self, config: ExperimentConfig) -> ExperimentResult:
         return ExperimentResult(
+            run_id="test-run",
             model=config.model,
-            variant=config.variant,
             dataset=config.dataset,
+            task="classification",
+            effective_params={"max_iter": 1000, **config.params},
             metrics={"accuracy": 0.9},
-            diagnostics={"source": "test-double"},
+            artifacts=[],
+            metadata={"source": "test-double"},
         )

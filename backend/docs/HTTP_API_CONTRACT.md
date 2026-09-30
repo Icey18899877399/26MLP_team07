@@ -1,142 +1,132 @@
 # HTTP API 合同
 
-> 上游合同存档。整合版允许 test_size=null（聚类必须为 null），并增加模型兼容数据集、参数说明与数据集大小字段；以运行服务的 /docs 和 [整合说明](../../docs/FULL_STACK.md) 为准。
+## 基本约定
 
-## 边界与发现
-
-前端无论采用本仓库目录还是独立 Git submodule，都只通过 HTTP/JSON 调用本服务，不读取 `backend/` 或 `external/ml-core/`。
-
-- 本地基础地址：`http://127.0.0.1:8000`
-- OpenAPI JSON：`GET /openapi.json`
-- 交互式文档：`GET /docs`
+- 本地地址：`http://127.0.0.1:8000`
+- OpenAPI：`GET /openapi.json`
+- 交互文档：`GET /docs`
 - Content-Type：`application/json`
 
-当前路径保持不带版本前缀的 `/api/*`。发生不兼容变更前，应先更新本文档和 OpenAPI，并通知前端负责人。
+前端无论是普通目录还是 submodule，都只依赖本合同。当前路径不带版本前缀；不兼容变更必须先同步本文档、OpenAPI 和前端负责人。
 
-## 服务状态
+## `GET /api/health`
 
-### `GET /api/health`
-
-即使 ML package 尚未接入，本端点也返回 HTTP 200，用于区分 interaction 服务与 ML backend 的状态。
+interaction 服务可用时始终返回 200。已正确安装 ML 包的示例：
 
 ```json
 {
   "status": "ok",
   "ml_backend": {
-    "available": false,
+    "available": true,
     "package": "ml_core",
-    "detail": "无法导入 ml_core；请安装并检查其依赖"
+    "detail": "ML public package API 已连接"
   }
 }
 ```
 
-前端只能在 `ml_backend.available` 为 `true` 时开放真实实验操作，不得以 mock 结果替代。
+`available=false` 时前端不得开放真实实验操作。
 
-## 模型与数据集
-
-### `GET /api/models`
+## `GET /api/models`
 
 ```json
 [
   {
-    "id": "logistic_regression",
-    "name": "Logistic Regression",
-    "task_type": "classification",
-    "variants": ["base", "optimized"],
-    "parameters": {}
+    "id": "logistic_regression.optimized",
+    "display_name": "Optimized Logistic Regression",
+    "task": "classification",
+    "compatible_datasets": ["wdbc"],
+    "default_params": {
+      "learning_rate": 0.1,
+      "max_iter": 1000,
+      "threshold": 0.5,
+      "l2": 0.0,
+      "tol": 1e-8,
+      "standardize": true,
+      "class_weight": null
+    },
+    "parameter_descriptions": {
+      "max_iter": "Positive maximum training iterations."
+    }
   }
 ]
 ```
 
-### `GET /api/datasets`
+`parameter_descriptions` 可用于表单帮助文本，但 ML 包仍是参数验证的最终权威。
+
+## `GET /api/datasets`
 
 ```json
 [
   {
     "id": "wdbc",
-    "name": "Wisconsin Diagnostic Breast Cancer",
-    "task_type": "classification"
+    "display_name": "Wisconsin Diagnostic Breast Cancer",
+    "task": "classification",
+    "sample_count": 569,
+    "feature_count": 30,
+    "has_target": true
   }
 ]
 ```
 
-两个端点在 ML package 缺失或公共合同不完整时返回 503；ML package 调用或返回校验失败时返回 502。
+两个发现端点在包缺失/合同不完整时返回 503，在调用或返回校验失败时返回 502。
 
-## 实验
-
-### `POST /api/experiments`
+## `POST /api/experiments`
 
 请求：
 
 ```json
 {
-  "model": "logistic_regression",
-  "variant": "optimized",
+  "model": "logistic_regression.optimized",
   "dataset": "wdbc",
-  "params": {"learning_rate": 0.1},
+  "params": {"max_iter": 500},
   "test_size": 0.2,
   "random_state": 42
 }
 ```
 
-响应：
+响应形状：
 
 ```json
 {
-  "model": "logistic_regression",
-  "variant": "optimized",
+  "run_id": "8a40a70e-8a9f-4ccf-81be-0fe34f165fc7",
+  "model": "logistic_regression.optimized",
   "dataset": "wdbc",
+  "task": "classification",
+  "effective_params": {"max_iter": 500},
   "metrics": {"accuracy": 0.95},
-  "diagnostics": {}
+  "artifacts": [],
+  "metadata": {"sample_count": 569}
 }
 ```
 
-- `variant` 当前只允许 `base` 或 `optimized`。
-- `test_size` 必须大于 0 且小于 1。
-- 未声明字段会被拒绝。
-- 模型特定参数由 ML package 负责验证。
-- metrics 必须是有限数值，diagnostics 必须是 JSON-safe 数据。
+- `test_size` 可省略或为 `null`；提供时必须在 0 与 1 之间。聚类实验必须省略它。
+- 未声明字段返回 422。
+- 模型/数据集 ID 与参数来自发现端点，不存在独立 `variant` 字段。
+- metrics 必须是有限数值；其他返回字段必须是 JSON-safe 数据。
+- artifact 只包含 `name`、`media_type`、`uri`，URI 的发布与访问策略后续另行约定。
 
 ## 错误
 
-除 FastAPI 默认的 422 validation response 外，业务错误统一为：
+业务错误统一为：
 
 ```json
-{
-  "detail": {
-    "code": "ml_backend_unavailable",
-    "message": "human-readable message"
-  }
-}
+{"detail": {"code": "ml_request_rejected", "message": "human-readable message"}}
 ```
 
 | HTTP | code | 含义 |
 | --- | --- | --- |
-| 400 | `ml_request_rejected` | ML package 拒绝模型、数据集或参数组合 |
-| 502 | `ml_execution_failed` | ML 执行失败或返回值违反公共合同 |
+| 400 | `ml_request_rejected` | 未知模型/数据集、不兼容组合或参数被 ML 包拒绝 |
+| 502 | `ml_execution_failed` | 执行失败或 ML 返回值违反合同 |
 | 503 | `ml_backend_unavailable` | `ml_core` 缺失或公共导出不完整 |
 | 422 | FastAPI validation detail | HTTP 请求结构不合法 |
 
-502 只返回通用消息；内部异常、堆栈和本地文件路径不会暴露给前端。
+502 只返回通用消息，不暴露内部异常、堆栈或本地路径。
 
-## CORS
+## CORS 与前端交付
 
-默认允许：
+默认允许 `http://localhost:5173`、`http://127.0.0.1:5173`，方法为 `GET/POST/OPTIONS`，请求头为 `Content-Type`，不启用 credentials。其他 origin 通过逗号分隔的 `MLP_CORS_ORIGINS` 设置。
 
-- `http://localhost:5173`
-- `http://127.0.0.1:5173`
+- 同仓库：前端放在根目录 `frontend/`。
+- Submodule：`git submodule add <frontend-repo-url> frontend`。
 
-后端仅允许白名单 origin 使用 `GET`、`POST`、`OPTIONS` 和 `Content-Type` 请求头，且不启用 credentials。使用其他开发端口或部署域名时，通过逗号分隔的 `MLP_CORS_ORIGINS` 配置完整 origin，例如：
-
-```dotenv
-MLP_CORS_ORIGINS=http://localhost:4173,https://ml-ui.example.com
-```
-
-不支持通配符、URL path、query、fragment 或嵌入凭据。
-
-## 源码交付模式
-
-- 同仓库模式：前端源码直接位于根目录 `frontend/`。
-- Submodule 模式：`git submodule add <frontend-repo-url> frontend`，父仓库固定经过联调的前端 SHA。
-
-两种方式不能改变 HTTP wire contract。若采用 submodule，前端仓库不得反向包含本仓库。
+两种方式不能改变 wire contract，也不得形成循环 submodule。

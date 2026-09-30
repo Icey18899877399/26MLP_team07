@@ -9,6 +9,7 @@ description = "FastAPI interaction layer for the Machine Learning Theory and Pra
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115,<1",
+    "ml-core",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.5,<3",
     "uvicorn[standard]>=0.30,<1",
@@ -29,3 +30,6 @@ testpaths = ["tests"]
 markers = [
     "integration: smoke tests that require the real ml_core package",
 ]
+
+[tool.uv.sources]
+ml-core = { path = "..", editable = true }

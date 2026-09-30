@@ -50,16 +50,15 @@ def test_unavailable_ml_endpoint_returns_503() -> None:
 def test_routes_delegate_to_fake_backend() -> None:
     client = TestClient(create_app(FakeMLBackend()))
 
-    assert client.get("/api/models").json()[0]["id"] == "logistic_regression"
+    assert client.get("/api/models").json()[0]["id"] == "logistic_regression.optimized"
     assert client.get("/api/datasets").json()[0]["id"] == "wdbc"
 
     response = client.post(
         "/api/experiments",
         json={
-            "model": "logistic_regression",
-            "variant": "optimized",
+            "model": "logistic_regression.optimized",
             "dataset": "wdbc",
-            "params": {"learning_rate": 0.1},
+            "params": {"max_iter": 500},
             "test_size": 0.2,
             "random_state": 42,
         },
@@ -67,7 +66,7 @@ def test_routes_delegate_to_fake_backend() -> None:
 
     assert response.status_code == 200
     assert response.json()["metrics"] == {"accuracy": 0.9}
-    assert response.json()["diagnostics"]["source"] == "test-double"
+    assert response.json()["metadata"]["source"] == "test-double"
 
 
 def test_experiment_request_is_strictly_validated() -> None:
@@ -76,8 +75,7 @@ def test_experiment_request_is_strictly_validated() -> None:
     response = client.post(
         "/api/experiments",
         json={
-            "model": "logistic_regression",
-            "variant": "invented",
+            "model": "logistic_regression.optimized",
             "dataset": "wdbc",
             "test_size": 1.2,
             "unexpected": True,
@@ -86,7 +84,6 @@ def test_experiment_request_is_strictly_validated() -> None:
 
     assert response.status_code == 422
     locations = {tuple(item["loc"]) for item in response.json()["detail"]}
-    assert ("body", "variant") in locations
     assert ("body", "test_size") in locations
     assert ("body", "unexpected") in locations
 
@@ -96,7 +93,7 @@ def test_domain_rejection_returns_documented_400() -> None:
 
     response = client.post(
         "/api/experiments",
-        json={"model": "unknown", "dataset": "wdbc", "variant": "base"},
+        json={"model": "unknown", "dataset": "wdbc"},
     )
 
     assert response.status_code == 400
@@ -114,9 +111,8 @@ def test_execution_failure_returns_generic_502_without_internal_path() -> None:
     response = client.post(
         "/api/experiments",
         json={
-            "model": "logistic_regression",
+            "model": "logistic_regression.optimized",
             "dataset": "wdbc",
-            "variant": "base",
         },
     )
 

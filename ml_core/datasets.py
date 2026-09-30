@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import csv
+import io
 from importlib.resources import files
+
+import numpy as np
 
 from .types import DatasetInfo
 
@@ -17,10 +21,12 @@ class LoadedDataset:
 
     info: DatasetInfo
     features: tuple[tuple[float, ...], ...]
-    targets: tuple[int, ...]
+    targets: tuple[int | float, ...]
 
 
 _DATASETS = {
+    "concrete": DatasetInfo("concrete", "Concrete Compressive Strength", "regression", 1030, 8, True),
+    "cardio": DatasetInfo("cardio", "Cardiotocography Anomaly Detection", "anomaly_detection", 1831, 21, True),
     "seeds": DatasetInfo(
         id="seeds",
         display_name="Seeds",
@@ -54,6 +60,15 @@ def load_dataset(dataset_id: str) -> LoadedDataset:
         return _load_wdbc(info)
     if dataset_id == "seeds":
         return _load_seeds(info)
+    if dataset_id == "concrete":
+        rows = list(csv.reader(io.StringIO(_resource_text("concrete_data.csv"))))[1:]
+        return LoadedDataset(info, tuple(tuple(map(float, row[:-1])) for row in rows),
+                             tuple(float(row[-1]) for row in rows))
+    if dataset_id == "cardio":
+        with files(_RESOURCE_PACKAGE).joinpath("6_cardio.npz").open("rb") as stream:
+            with np.load(stream, allow_pickle=False) as data:
+                return LoadedDataset(info, tuple(tuple(map(float, row)) for row in data["X"]),
+                                     tuple(map(int, data["y"])))
     raise KeyError(dataset_id)
 
 

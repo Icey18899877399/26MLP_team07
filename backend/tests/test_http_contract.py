@@ -66,3 +66,25 @@ def test_openapi_documents_public_endpoints_and_errors() -> None:
         "503",
     }
     assert "ErrorResponse" in document["components"]["schemas"]
+
+    schemas = document["components"]["schemas"]
+    experiment_fields = schemas["ExperimentConfig"]["properties"]
+    result_fields = schemas["ExperimentResult"]["properties"]
+    assert "variant" not in experiment_fields
+    assert set(experiment_fields) == {
+        "model",
+        "dataset",
+        "params",
+        "test_size",
+        "random_state",
+    }
+    assert set(result_fields) == {
+        "run_id",
+        "model",
+        "dataset",
+        "task",
+        "effective_params",
+        "metrics",
+        "artifacts",
+        "metadata",
+    }

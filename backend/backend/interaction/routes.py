@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from backend.contracts import (
-    DatasetSpec,
+    DatasetInfo,
     ExperimentConfig,
     ExperimentResult,
-    ModelSpec,
+    ModelInfo,
 )
 from backend.integration.ml_backend import (
     MLBackend,
@@ -68,10 +68,10 @@ def health(backend: MLBackend = Depends(get_ml_backend)) -> HealthResponse:
 
 @router.get(
     "/models",
-    response_model=list[ModelSpec],
+    response_model=list[ModelInfo],
     responses={**UNAVAILABLE_RESPONSE, **EXECUTION_RESPONSE},
 )
-def list_models(backend: MLBackend = Depends(get_ml_backend)) -> list[ModelSpec]:
+def list_models(backend: MLBackend = Depends(get_ml_backend)) -> list[ModelInfo]:
     try:
         return backend.list_models()
     except (MLBackendUnavailable, MLRequestError, MLExecutionError) as exc:
@@ -80,10 +80,10 @@ def list_models(backend: MLBackend = Depends(get_ml_backend)) -> list[ModelSpec]
 
 @router.get(
     "/datasets",
-    response_model=list[DatasetSpec],
+    response_model=list[DatasetInfo],
     responses={**UNAVAILABLE_RESPONSE, **EXECUTION_RESPONSE},
 )
-def list_datasets(backend: MLBackend = Depends(get_ml_backend)) -> list[DatasetSpec]:
+def list_datasets(backend: MLBackend = Depends(get_ml_backend)) -> list[DatasetInfo]:
     try:
         return backend.list_datasets()
     except (MLBackendUnavailable, MLRequestError, MLExecutionError) as exc:
