@@ -4,15 +4,16 @@
 
 | 组件 | 来源 | 导入提交 |
 | --- | --- | --- |
-| 后端 | https://github.com/Moonia-Cherry/26MLP_team07_backend | f33e37c121497bcaa97e4502dc518cf53c0de99f |
-| 前端 | https://github.com/diana0103-espuma/26MLP_team07_frontend | 63ec7c1741137da71faf3a0ed6bfb8eca11815c8 |
-| 模型 | https://github.com/Icey18899877399/26MLP_team07 | 5c1bb06a52e9e542e20bb18a3f0f8d39b16f47ed |
+| 后端 PR #1 | https://github.com/Moonia-Cherry/26MLP_team07_backend/pull/1 | e83f128ef00021547c50770a1e637d793511c9da |
+| 前端 PR #1 | https://github.com/diana0103-espuma/26MLP_team07_frontend/pull/1 | 2100a6e9f7d9a09bc6808dda1486c4735a3e6e8e |
+| 模型 PR #1 | https://github.com/Icey18899877399/26MLP_team07/pull/1 | a72ea7f7f5e04cd0fe55d4a12d90eef67e872c22 |
 
 来源目录与原作者代码均予保留。此次采用普通目录快照，不保留嵌套 .git，也移除后端指回当前仓库的子模块配置以避免自引用。
 原后端教案 PDF 随后端源码保留。上游说明书中的旧独立仓库命令由整合版说明替代。
 无新增整体许可证；来源记录不改变原作者权利。
 
 2026-09-29 更新导入队友后端的原生合同、路由、公共 API 边界和测试；保留本仓库的目录结构、启动器与本地包依赖，不覆盖模型代码。
+2026-09-30 按用户要求继续合入三个 PR 的分支内容（读取时均为 OPEN），并在本仓库联调。前后端仍为普通目录快照；不替队友合并或修改其远端 PR。模型 PR 的提交历史保留在本仓库合并记录中。
 前端在原作者 Vue/ECharts 代码基础上扩展算法目录、真实训练和可视化；ml_core 新增原有算法的公共适配器，Models/ 中的手写实现保持不变。
 
 ## 课堂优秀案例参考

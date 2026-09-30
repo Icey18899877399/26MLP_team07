@@ -36,7 +36,13 @@ export function extractHyperparams(model, hyperparams) {
     if (value === undefined || value === '') continue
     if (p.type === 'json') {
       try { result[p.name] = typeof value === 'string' ? JSON.parse(value) : value }
-      catch { throw new Error(`${p.name} 必须是有效 JSON，例如 null、5、[16, 8] 或 "balanced"`) }
+      catch { throw new Error(`${p.name} 必须是有效 JSON，例如 null、5 或 [16, 8]`) }
+    } else if (p.type === 'int' || p.type === 'float') {
+      if (value === null || !Number.isFinite(value)) throw new Error(`${p.name} 必须填写有效数字`)
+      result[p.name] = value
+    } else if (p.name === 'gamma' && typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+      if (Number(value) <= 0) throw new Error('gamma 必须是正数或 scale')
+      result[p.name] = Number(value)
     } else result[p.name] = value
   }
   return result

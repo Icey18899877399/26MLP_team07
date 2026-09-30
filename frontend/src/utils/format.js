@@ -16,9 +16,17 @@ export function formatPercent(value, digits = 2) {
   return `${(Number(value) * 100).toFixed(digits)}%`
 }
 
+/** Only probability-like metrics have percentage units; counts and R² do not. */
+export function formatMetric(id, value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—'
+  const percentages = ['accuracy', 'precision', 'recall', 'f1', 'anomaly_precision', 'anomaly_recall', 'anomaly_f1']
+  return percentages.includes(id) ? formatPercent(value) : formatNumber(value)
+}
+
 /** 毫秒时长格式化为易读文本 */
 export function formatDuration(ms) {
   if (ms === null || ms === undefined) return '-'
+  if (ms < 1000) return `${Math.round(ms)} ms`
   const totalSec = Math.round(ms / 1000)
   if (totalSec < 60) return `${totalSec}s`
   const min = Math.floor(totalSec / 60)

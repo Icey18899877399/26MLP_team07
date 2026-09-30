@@ -19,11 +19,28 @@ def real_backend() -> PackageMLBackend:
 
 @pytest.mark.integration
 def test_real_ml_core_discovery(real_backend: PackageMLBackend) -> None:
-    assert {item.id for item in real_backend.list_models()} >= {
+    assert [item.id for item in real_backend.list_models()] == [
+        "cart_decision_tree.optimized",
+        "dbscan.optimized",
+        "gaussian_naive_bayes.optimized",
+        "gbdt_regression.optimized",
+        "isolation_forest.optimized",
         "kmeans.optimized",
+        "knn.optimized",
+        "linear_regression.optimized",
         "logistic_regression.optimized",
-    }
-    assert {item.id for item in real_backend.list_datasets()} >= {"seeds", "wdbc"}
+        "mlp_regression.optimized",
+        "one_class_svm.optimized",
+        "random_forest.optimized",
+    ]
+    assert [item.id for item in real_backend.list_datasets()] == [
+        "23_mammography",
+        "6_cardio",
+        "california_housing",
+        "concrete",
+        "seeds",
+        "wdbc",
+    ]
 
 
 @pytest.mark.integration
@@ -62,3 +79,21 @@ def test_real_ml_core_through_http(real_backend: PackageMLBackend) -> None:
     assert response.status_code == 200
     assert response.json()["task"] == "classification"
     assert "accuracy" in response.json()["metrics"]
+
+
+@pytest.mark.integration
+def test_real_ml_core_anomaly_through_http(real_backend: PackageMLBackend) -> None:
+    client = TestClient(create_app(real_backend))
+
+    response = client.post(
+        "/api/experiments",
+        json={
+            "model": "isolation_forest.optimized",
+            "dataset": "6_cardio",
+            "params": {"n_estimators": 10},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["task"] == "anomaly_detection"
+    assert "anomaly_f1" in response.json()["metrics"]

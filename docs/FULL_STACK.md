@@ -27,24 +27,24 @@ npm --prefix frontend run dev
 ```
 
 前端开发服务器把 /api 代理到 8000；无需配置跨域。可用 frontend/.env 设置
-`VITE_API_BASE_URL=http://127.0.0.1:8000/api`，或在页面连接设置修改地址。
+`VITE_API_BASE_URL=http://127.0.0.1:8000`，或在页面连接设置修改地址。该值是服务地址，不含 `/api`；留空则使用同源代理。
 远程部署需把 /api 反向代理到后端，并为 Vue history 路由配置 index.html 回退。
 `npm --prefix frontend run build` 生成 frontend/dist；构建产物无需上传源码仓库。
-单独使用 Vite preview 不包含开发代理，需设置 API 地址或配置生产反向代理。
+单独使用 Vite preview 不包含开发代理，需设置 API 地址并通过 `MLP_CORS_ORIGINS` 允许预览页来源，或配置生产同源反向代理。
 
 ## 已连通功能
 
 - 动态模型与数据集列表、参数表单、真实实验执行与错误提示。
 - 分类、回归、聚类、异常检测四类任务；模型与数据集以服务端公共目录为准。
-- 基础版与优化版使用不同的完整模型 ID，可分别训练并保存结果。
+- 同步队友 PR 后，公共目录提供 12 个算法的优化版（完整 ID 后缀 `.optimized`），不是 24 个可训练选项；基础算法源码仍保留在 Models/。
 - 指标和图表来自当次真实实验；图表描述说明投影或抽样的含义。
 - 数据集信息页、同一数据集历史结果对比、浏览器本地历史。
 - 仅展示 ml_core 公共 API 实际支持的模型，不将模拟结果当作训练输出。
 
 ## 协议适配
 
-前端使用 HTTP JSON。保留原 Vue stores 的内部事件接口以复用界面，`wsClient.js` 仅为兼容导出，不建立 WebSocket。
-原 mock/ 作为上游参考源码保留，不在启动流程中运行；它不是生产后端，也不作为真实结果来源。
+前端使用队友 PR 的纯 HTTP JSON 架构，通过统一 API 客户端调用四个合同端点，不建立 WebSocket。
+mock/ 仅保留上游模拟参考，不在统一启动流程中运行；其健康信息明确标为不可训练，避免把模拟结果当作真实结果。
 新的设置/历史存储键与旧模拟记录隔离。
 
 HTTP 与 ml_core 使用同一原生合同：`model` 为完整 ID，例如 `logistic_regression.optimized`。
@@ -63,7 +63,7 @@ ml_core 的请求类错误映射为 400，内部运行错误为 502（不暴露�
 }
 ```
 
-向 POST /api/experiments 提交。聚类需 test_size 为 null 或省略。
+向 POST /api/experiments 提交。聚类需 test_size 为 null 或省略；异常检测按上游合同不使用 test_size。
 返回顶层 run_id、model、dataset、task、effective_params、metrics、artifacts、metadata。
 `metadata.visualizations` 为图表数组，每项含 id、title、description、option；option 是可直接渲染的 ECharts JSON 配置。
 前端耗时是完整请求时间，包含训练和评价。
@@ -75,8 +75,24 @@ ml_core 的请求类错误映射为 400，内部运行错误为 502（不暴露�
 前端每次仅发起一项实验；保留页面直到返回结果。分类固定采用分层抽样。
 原上游的数据预览与完整批量基准功能未实现；当前展示公开数据集元信息和同数据集历史结果对比。
 历史只在本机浏览器保存。页面刷新后没有服务端任务恢复。
+异常检测沿用队友的数据内评价：孤立森林在原数据拟合及评价，单类 SVM 用正常样本子集拟合后对原数据评价；这些指标不能视为独立测试集上的泛化成绩。页面和图表应保留协议说明。
 本机/课程演示用途，部署到公网前需另行实现鉴权、限流与资源配额。
 模型仓库既有数据文件仍保留；课程如要求代码仓库不得含数据，需另行设计下载/打包策略。
+
+## 算法与数据集
+
+| 任务 | 算法（优化版） | 可选数据集 |
+| --- | --- | --- |
+| 分类 | 逻辑回归、KNN、高斯朴素贝叶斯、CART、随机森林 | WDBC |
+| 回归 | 线性回归、GBDT、MLP | Concrete；线性回归和 MLP 也支持 California Housing |
+| 聚类 | K-Means、DBSCAN | Seeds |
+| 异常检测 | 孤立森林、单类 SVM | Cardio、Mammography |
+
+数据集 ID 以 `/api/datasets` 为准：`wdbc`、`seeds`、`concrete`、`california_housing`、`6_cardio`、`23_mammography`。
+数据量、运行耗时和算法收敛情况会影响演示速度；不同任务/协议的指标不应直接横向排名。
+
+为保证纯 Python 模型可用于交互演示，回归在随机划分后最多使用 2000 条训练样本，测试集不裁剪；单类 SVM 仍按上游协议最多取 300 条正常样本拟合。MLP 默认训练 100 轮，可在参数中修改。返回元数据记录实际样本数、上限和评价协议。
+散点图最多显示 1000 个评价样本，图中说明显示数与总数；指标和分布统计仍用全部评价样本。真实损失曲线仅在模型提供训练记录时显示，并注明是否为标准化目标空间。
 
 ## 验证
 
@@ -93,5 +109,8 @@ npm --prefix frontend run build
 后端测试包括真实 ml_core 调用，不仅是 FakeMLBackend。
 前端 tests/httpClient.test.js 检查协议转换；scripts/http-smoke.mjs 可在服务启动后执行：
 `node frontend/scripts/http-smoke.mjs`，通过 Vite 代理运行真实实验。
+
+2026-09-30 整合验收：358 项模型 unittest、5 项图表专项、56 项后端、14 项前端测试通过；生产构建及仓库外 wheel 安装通过。HTTP smoke 与浏览器 smoke 均实际运行全部 12 个算法；浏览器还验证放大/PNG 下载、JSON 导出、历史恢复、六数据集、对比页、手册和 390px 布局。
+浏览器测试需 Playwright 与 Edge，可用 `PLAYWRIGHT_MODULE` 指定本地 Playwright 模块地址后执行 `node frontend/scripts/browser-smoke.mjs`。
 
 来源提交与整合范围见 [SOURCES.md](SOURCES.md)。后端原生合同见 [HTTP_API_CONTRACT.md](../backend/docs/HTTP_API_CONTRACT.md)。

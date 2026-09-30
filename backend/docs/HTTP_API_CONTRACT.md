@@ -99,10 +99,12 @@ interaction 服务可用时始终返回 200。已正确安装 ML 包的示例：
 }
 ```
 
-- `test_size` 可省略或为 `null`；提供时必须在 0 与 1 之间。聚类实验必须省略它。
+- `test_size` 可省略或为 `null`；提供时必须在 0 与 1 之间。聚类实验必须省略它，异常检测（`anomaly_detection`）忽略该值。
 - 未声明字段返回 422。
 - 模型/数据集 ID 与参数来自发现端点，不存在独立 `variant` 字段。
 - metrics 必须是有限数值；其他返回字段必须是 JSON-safe 数据。
+- 本整合版扩展 `metadata.visualizations`：数组元素包含 `id`、`title`、`description`、`option`。`option` 为真实数据生成的 ECharts JSON 配置，前端可绘图或放大；不包含函数、文件系统路径或模拟训练过程。
+- `metadata.evaluation_protocol`（如存在）说明评价口径。异常检测当前为数据内评价，不能将其指标解释为独立测试集成绩。
 - artifact 只包含 `name`、`media_type`、`uri`，URI 的发布与访问策略后续另行约定。
 
 ## 错误

@@ -2,138 +2,29 @@
 
 from __future__ import annotations
 
-import math
-import random
-from collections import defaultdict
+from collections.abc import Callable
 from uuid import uuid4
 
+from Models.cart_decision_tree_optimized import OptimizedCARTClassifierScratch
+from Models.gaussian_naive_bayes_optimized import OptimizedGaussianNaiveBayesScratch
+from Models.knn_optimized import OptimizedKNNScratch
 from Models.logistic_regression_optimized import OptimizedLogisticRegressionScratch
+from Models.random_forest_optimized import OptimizedRandomForestClassifierScratch
 
 from ..datasets import LoadedDataset
 from ..errors import InvalidParameterError
 from ..types import ExperimentConfig, ExperimentResult, JSONValue
-
-
-def run_logistic_regression(
-    config: ExperimentConfig,
-    dataset: LoadedDataset,
-    effective_params: dict[str, JSONValue],
-) -> ExperimentResult:
-    """Train and evaluate optimized logistic regression on a stratified split."""
-
-    _validate_logistic_params(effective_params)
-    test_size = 0.2 if config.test_size is None else float(config.test_size)
-    train_indices, test_indices = _stratified_split(
-        dataset.targets,
-        test_size=test_size,
-        random_state=config.random_state,
-    )
-    train_features = [dataset.features[index] for index in train_indices]
-    train_targets = [dataset.targets[index] for index in train_indices]
-    test_features = [dataset.features[index] for index in test_indices]
-    test_targets = [dataset.targets[index] for index in test_indices]
-
-    model = OptimizedLogisticRegressionScratch(**effective_params)
-    model.fit(train_features, train_targets)
-    predictions = model.predict(test_features)
-    metrics = _classification_metrics(test_targets, predictions)
-
-    return ExperimentResult(
-        run_id=str(uuid4()),
-        model=config.model,
-        dataset=config.dataset,
-        task="classification",
-        effective_params=dict(effective_params),
-        metrics=metrics,
-        metadata={
-            "train_sample_count": len(train_indices),
-            "test_sample_count": len(test_indices),
-            "feature_count": dataset.info.feature_count,
-            "iteration_count": model.n_iter,
-            "positive_label": 1,
-            "random_state": config.random_state,
-            "test_size": test_size,
-        },
-    )
-
-
-def _validate_logistic_params(params: dict[str, JSONValue]) -> None:
-    _require_positive_number(params, "learning_rate")
-    _require_positive_integer(params, "max_iter")
-    _require_bounded_number(params, "threshold", minimum=0.0, maximum=1.0)
-    _require_non_negative_number(params, "l2")
-    _require_non_negative_number(params, "tol")
-    if not isinstance(params["standardize"], bool):
-        raise InvalidParameterError("standardize must be a boolean")
-    if params["class_weight"] not in (None, "balanced"):
-        raise InvalidParameterError("class_weight must be null or 'balanced'")
-
-
-def _require_positive_integer(params: dict[str, JSONValue], name: str) -> None:
-    value = params[name]
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise InvalidParameterError(f"{name} must be a positive integer")
-
-
-def _require_positive_number(params: dict[str, JSONValue], name: str) -> None:
-    value = params[name]
-    if not _is_finite_number(value) or float(value) <= 0.0:
-        raise InvalidParameterError(f"{name} must be a positive finite number")
-
-
-def _require_non_negative_number(params: dict[str, JSONValue], name: str) -> None:
-    value = params[name]
-    if not _is_finite_number(value) or float(value) < 0.0:
-        raise InvalidParameterError(f"{name} must be a non-negative finite number")
-
-
-def _require_bounded_number(
-    params: dict[str, JSONValue],
-    name: str,
-    minimum: float,
-    maximum: float,
-) -> None:
-    value = params[name]
-    if (
-        not _is_finite_number(value)
-        or float(value) < minimum
-        or float(value) > maximum
-    ):
-        raise InvalidParameterError(
-            f"{name} must be a finite number between {minimum} and {maximum}"
-        )
-
-
-def _is_finite_number(value: JSONValue) -> bool:
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, (int, float))
-        and math.isfinite(value)
-    )
-
-
-def _stratified_split(
-    targets: tuple[int, ...],
-    test_size: float,
-    random_state: int,
-) -> tuple[list[int], list[int]]:
-    grouped: dict[int, list[int]] = defaultdict(list)
-    for index, target in enumerate(targets):
-        grouped[target].append(index)
-
-    generator = random.Random(random_state)
-    train_indices: list[int] = []
-    test_indices: list[int] = []
-    for target in sorted(grouped):
-        indices = list(grouped[target])
-        generator.shuffle(indices)
-        test_count = max(1, min(len(indices) - 1, round(len(indices) * test_size)))
-        test_indices.extend(indices[:test_count])
-        train_indices.extend(indices[test_count:])
-
-    generator.shuffle(train_indices)
-    generator.shuffle(test_indices)
-    return train_indices, test_indices
+from ._common import (
+    merge_model_kwargs,
+    require_boolean,
+    require_bounded_number,
+    require_non_negative_number,
+    require_optional_positive_integer_or_none,
+    require_positive_integer,
+    require_positive_number,
+    stratified_split,
+)
+from .charts import classification_charts, loss_charts
 
 
 def _classification_metrics(
@@ -159,3 +50,203 @@ def _classification_metrics(
         "fn": fn,
         "tp": tp,
     }
+
+
+def _fit_evaluate_classifier(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+    model_class: type,
+    *,
+    extra_kwargs: dict[str, JSONValue] | None = None,
+    metadata_extra: Callable[[object], dict[str, JSONValue]] | None = None,
+) -> ExperimentResult:
+    """分类共享骨架：分层切分 → fit → predict → 分类指标 → 结果组装。"""
+
+    test_size = 0.2 if config.test_size is None else float(config.test_size)
+    train_indices, test_indices = stratified_split(
+        dataset.targets,
+        test_size=test_size,
+        random_state=config.random_state,
+    )
+    train_features = [dataset.features[index] for index in train_indices]
+    train_targets = [dataset.targets[index] for index in train_indices]
+    test_features = [dataset.features[index] for index in test_indices]
+    test_targets = [dataset.targets[index] for index in test_indices]
+
+    model = model_class(**merge_model_kwargs(effective_params, extra_kwargs or {}))
+    model.fit(train_features, train_targets)
+    predictions = model.predict(test_features)
+    metrics = _classification_metrics(test_targets, predictions)
+    # These scratch estimators preserve first-seen class order, not sorted order.
+    # Logistic regression alone documents a fixed [P(0), P(1)] layout.
+    class_order = getattr(model, "classes", [0, 1])
+    positive_column = list(class_order).index(1)
+
+    metadata: dict[str, JSONValue] = {
+        "train_sample_count": len(train_indices),
+        "test_sample_count": len(test_indices),
+        "feature_count": dataset.info.feature_count,
+        "positive_label": 1,
+        "random_state": config.random_state,
+        "test_size": test_size,
+        "evaluation_protocol": "stratified_holdout：分层留出测试集，预处理仅在训练集拟合",
+        "visualizations": classification_charts(
+            test_targets, predictions,
+            [row[positive_column] for row in model.predict_proba(test_features)]
+        ) + loss_charts(model),
+    }
+    if metadata_extra is not None:
+        metadata.update(metadata_extra(model))
+
+    return ExperimentResult(
+        run_id=str(uuid4()),
+        model=config.model,
+        dataset=config.dataset,
+        task="classification",
+        effective_params=dict(effective_params),
+        metrics=metrics,
+        metadata=metadata,
+    )
+
+
+def run_logistic_regression(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+) -> ExperimentResult:
+    """Train and evaluate optimized logistic regression on a stratified split."""
+
+    _validate_logistic_params(effective_params)
+    return _fit_evaluate_classifier(
+        config,
+        dataset,
+        effective_params,
+        OptimizedLogisticRegressionScratch,
+        metadata_extra=lambda model: {"iteration_count": model.n_iter},
+    )
+
+
+def _validate_logistic_params(params: dict[str, JSONValue]) -> None:
+    require_positive_number(params, "learning_rate")
+    require_positive_integer(params, "max_iter")
+    require_bounded_number(params, "threshold", minimum=0.0, maximum=1.0)
+    require_non_negative_number(params, "l2")
+    require_non_negative_number(params, "tol")
+    require_boolean(params, "standardize")
+    if params["class_weight"] not in (None, "balanced"):
+        raise InvalidParameterError("class_weight 必须是 null 或 'balanced'")
+
+
+def run_knn(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+) -> ExperimentResult:
+    """Train and evaluate optimized KNN on a stratified split."""
+
+    _validate_knn_params(effective_params)
+    return _fit_evaluate_classifier(
+        config,
+        dataset,
+        effective_params,
+        OptimizedKNNScratch,
+    )
+
+
+def _validate_knn_params(params: dict[str, JSONValue]) -> None:
+    require_positive_integer(params, "n_neighbors")
+    require_positive_number(params, "p")
+    if float(params["p"]) < 1.0:
+        raise InvalidParameterError("p 必须是不小于 1 的有限数值")
+    if params["weights"] not in ("uniform", "distance"):
+        raise InvalidParameterError("weights 必须是 'uniform' 或 'distance'")
+    require_boolean(params, "standardize")
+
+
+def run_gaussian_naive_bayes(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+) -> ExperimentResult:
+    """Train and evaluate optimized Gaussian Naive Bayes on a stratified split."""
+
+    _validate_gaussian_nb_params(effective_params)
+    return _fit_evaluate_classifier(
+        config,
+        dataset,
+        effective_params,
+        OptimizedGaussianNaiveBayesScratch,
+    )
+
+
+def _validate_gaussian_nb_params(params: dict[str, JSONValue]) -> None:
+    require_positive_number(params, "var_smoothing")
+
+
+def run_cart_decision_tree(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+) -> ExperimentResult:
+    """Train and evaluate the optimized CART classifier on a stratified split."""
+
+    _validate_cart_params(effective_params)
+    return _fit_evaluate_classifier(
+        config,
+        dataset,
+        effective_params,
+        OptimizedCARTClassifierScratch,
+        extra_kwargs={"random_state": config.random_state},
+        metadata_extra=lambda model: {
+            "tree_depth": int(model.tree_depth_),
+            "leaf_count": int(model.n_leaves_),
+        },
+    )
+
+
+def _validate_cart_params(params: dict[str, JSONValue]) -> None:
+    require_optional_positive_integer_or_none(params, "max_depth")
+    require_positive_integer(params, "min_samples_split")
+    require_positive_integer(params, "min_samples_leaf")
+    require_non_negative_number(params, "min_impurity_decrease")
+    require_non_negative_number(params, "ccp_alpha")
+
+
+def run_random_forest(
+    config: ExperimentConfig,
+    dataset: LoadedDataset,
+    effective_params: dict[str, JSONValue],
+) -> ExperimentResult:
+    """Train and evaluate the optimized random forest on a stratified split.
+
+    n_jobs 固定为 1（Windows 下进程池 spawn 不安全），其余危险参数由适配器注入。
+    """
+
+    _validate_random_forest_params(effective_params)
+    return _fit_evaluate_classifier(
+        config,
+        dataset,
+        effective_params,
+        OptimizedRandomForestClassifierScratch,
+        extra_kwargs={
+            "n_jobs": 1,
+            "max_features": "sqrt",
+            "class_weight": None,
+            "ccp_alpha": 0.0,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": True,
+            "max_samples": None,
+            "oob_score": True,
+            "random_state": config.random_state,
+        },
+    )
+
+
+def _validate_random_forest_params(params: dict[str, JSONValue]) -> None:
+    require_positive_integer(params, "n_estimators")
+    require_optional_positive_integer_or_none(params, "max_depth")
+    require_positive_integer(params, "min_samples_split")
+    require_positive_integer(params, "min_samples_leaf")
+    if params["voting"] not in ("soft", "hard"):
+        raise InvalidParameterError("voting 必须是 'soft' 或 'hard'")

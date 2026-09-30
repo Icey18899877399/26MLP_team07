@@ -21,10 +21,15 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e ".[test]"
-python -m pip install -e external/ml-core
+python -m pip install --no-deps --force-reinstall external/ml-core
 Copy-Item .env.example .env
 python -m uvicorn backend.main:app --reload
 ```
+
+> 注意：在路径含中文的 Windows 上不要用 `pip install -e external/ml-core`——
+> Python 以 locale 编码（GBK）读取 .pth 文件而 pip 写 UTF-8，editable 安装会
+> 静默失效（`import ml_core` 报 ModuleNotFoundError）。用非 editable 重装
+> （改 ml-core 代码后重新执行上面这条命令）。
 
 已 clone 但没有 submodule 时，先运行：
 
@@ -39,7 +44,11 @@ git submodule update --init --recursive
 - `GET /api/datasets`
 - `POST /api/experiments`
 
-安装 `ml_core` 后，health 中的 `ml_backend.available` 应为 `true`。当前公开的真实组合为 `kmeans.optimized + seeds` 和 `logistic_regression.optimized + wdbc`。
+安装 `ml_core` 后，health 中的 `ml_backend.available` 应为 `true`。当前公开 12 个模型
+（逻辑回归 / K近邻 / 朴素贝叶斯 / 决策树 / 随机森林 / 线性回归 / GBDT回归 / MLP回归 /
+K均值聚类 / DBSCAN聚类 / 孤立森林 / 单类SVM）与 6 个数据集
+（乳腺癌诊断 / 小麦种子 / 混凝土强度 / 加州房价 / 心电图异常检测 / 乳腺造影异常检测），
+覆盖 classification / regression / clustering / anomaly_detection 四种任务类型。
 
 ## 配置
 

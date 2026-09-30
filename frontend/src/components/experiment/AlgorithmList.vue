@@ -15,7 +15,8 @@ const emit = defineEmits(['select'])
 const TASK_TYPE_NAMES = {
   classification: '分类',
   regression: '回归',
-  clustering: '聚类'
+  clustering: '聚类',
+  anomaly_detection: '异常检测'
 }
 
 /** 按任务类型分组：[{ taskType, name, items }] */
@@ -42,10 +43,13 @@ function select(algo) {
   <div class="algorithm-list">
     <div v-for="group in groups" :key="group.label" class="algo-group">
       <div class="algo-group-title">{{ group.label }}</div>
-      <div
+      <button
         v-for="algo in group.items"
         :key="algo.id"
         class="algo-item"
+        type="button"
+        :data-model-id="algo.id"
+        :aria-pressed="algo.id === activeId"
         :class="{ active: algo.id === activeId }"
         @click="select(algo)"
       >
@@ -54,7 +58,7 @@ function select(algo) {
           <el-tag v-if="algo.id === activeId" size="small" type="primary" effect="plain">已选</el-tag>
         </div>
         <div class="algo-desc">{{ algo.description }}</div>
-      </div>
+      </button>
     </div>
   </div>
 </template>
@@ -73,6 +77,13 @@ function select(algo) {
 }
 
 .algo-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  color: inherit;
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;

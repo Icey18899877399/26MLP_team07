@@ -1,4 +1,19 @@
 /* 全局基础样式 */
+:root {
+  --el-color-primary:#25855e;
+  --el-color-primary-light-3:#65a487;
+  --el-color-primary-light-5:#99c5b0;
+  --el-color-primary-light-7:#c6e0d2;
+  --el-color-primary-light-8:#dfede4;
+  --el-color-primary-light-9:#edf6f0;
+  --el-color-primary-dark-2:#176b48;
+  --el-color-success:#25855e;
+  --el-bg-color-page:#f3f8f5;
+  --el-text-color-primary:#263e31;
+  --el-text-color-regular:#50675a;
+  --el-border-color:#dce7df;
+  --el-border-color-light:#e6eee9;
+}
 * {
   box-sizing: border-box;
 }
@@ -9,6 +24,8 @@ body {
   padding: 0;
   height: 100%;
   font-family: system-ui, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  background:#f3f8f5;
+  color:#263e31;
 }
 
 #app {
@@ -18,9 +35,11 @@ body {
 /* 页面通用容器 */
 .page-card {
   background: #fff;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: 13px;
+  border:1px solid #e2ece5;
+  padding: 24px;
+  margin-bottom: 22px;
+  box-shadow:0 3px 16px #264b3410;
 }
 
 .page-card-title {
@@ -33,3 +52,11 @@ body {
 .chart-box {
   width: 100%;
 }
+.workspace-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:12px 0 32px}
+.eyebrow{font-size:10px;letter-spacing:1.6px;color:#8caa98;font-weight:600}
+.workspace-hero h1{font-size:29px;letter-spacing:1px;margin:12px 0;color:#234b36;font-weight:700}
+.workspace-hero p{font-size:13px;color:#84998b;margin:0;line-height:1.8}
+.hero-stats{display:flex;gap:40px;margin-right:25px}.hero-stats>div{display:flex;flex-direction:column;gap:4px}.hero-stats strong{font-size:29px;line-height:1.2;color:#2f7855;font-weight:600}.hero-stats span{font-size:11px;color:#91a597;white-space:nowrap}
+.section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:23px}.section-heading>div{display:flex;align-items:center;gap:10px}.section-heading h2,.section-heading h3{margin:0;font-size:17px;font-weight:650}.section-number{font-size:12px;font-family:monospace;color:#3d9970;background:#eaf5ed;padding:5px 7px;border-radius:5px}
+.muted{font-size:12px;color:#839689;line-height:1.8}.el-form-item__label{font-size:12px!important;font-weight:550}.el-button{font-weight:500}.el-collapse{border-color:#e7eee9}.el-collapse-item__header{font-size:12px}.el-collapse-item__content{padding-bottom:12px}.el-table{--el-table-header-bg-color:#f5f9f6;--el-table-border-color:#e8efe9}.el-alert__title{word-break:break-word;line-height:1.8!important}
+@media(max-width:760px){.workspace-hero{display:block;padding:8px 0 24px}.workspace-hero h1{font-size:24px}.hero-stats{margin-top:20px;gap:35px}.hero-stats strong{font-size:23px}.page-card{padding:18px}.section-heading{flex-wrap:wrap}.section-heading h2{font-size:16px}}

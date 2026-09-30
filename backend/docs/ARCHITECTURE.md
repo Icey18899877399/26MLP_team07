@@ -1,5 +1,7 @@
 # 交互平台架构
 
+> 本文同步自队友 PR #1。本整合仓库使用普通 `frontend/`、`backend/` 目录和根目录 `ml_core/`，不使用 submodule；独立仓库部署方式仅作上游背景。
+
 ## 分层
 
 ```text
@@ -46,8 +48,8 @@ Git submodule 只解决源码版本固定；运行时边界是可安装的 Pytho
 - health、models、datasets、experiments 四个端点。
 - 严格请求/响应 schema、OpenAPI、CORS 与 400/502/503 错误映射。
 - `ml_core` 真实模型发现、数据集发现与实验调用。
-- 真实 `kmeans.optimized` 和 `logistic_regression.optimized` smoke test。
-- ML submodule 固定到 `5c1bb06a52e9e542e20bb18a3f0f8d39b16f47ed`。
-- 前端路径保持为空闲状态，兼容普通目录与 submodule。
+- 真实 12 模型 / 6 数据集发现与各任务类型 smoke test（含 anomaly_detection HTTP 层测试）。
+- 整合的 ML 基线为 `a72ea7f`（12 模型注册 + 中文元数据 + 回归/异常数据集资源），在此基础上补充真实可视化。
+- 本整合仓库的 frontend/ 已包含 Vue 前端，统一启动器同时启动前后端。
 
 WebSocket、长任务队列和前端可视化不属于当前阶段。ML 上游仍需在最终交付前解决数据集本体被 Git/package 跟踪的问题。

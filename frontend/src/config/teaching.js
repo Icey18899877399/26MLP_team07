@@ -15,7 +15,9 @@ const notes = {
   isolation_forest: ['孤立森林', '用随机划分衡量样本被孤立的难易程度。', '异常分数与阈值决定检出结果；结合留出集标签检查误报和漏报。']
 }
 export function algorithmNotes(id) {
-  const family = id.split('.')[0]
+  const original = id.split('.')[0]
+  const family = ({cart_decision_tree: 'decision_tree', gaussian_naive_bayes: 'naive_bayes', gbdt_regression: 'gradient_boosting', mlp_regression: 'mlp'})[original] || original
+  if (family === 'one_class_svm') return {chineseName: '单类支持向量机', description: '学习正常样本的边界，识别偏离主要分布的观测。', insight: '核宽度与 nu 影响异常边界；当前评估包含拟合样本，不能解释为独立测试集表现。'}
   const value = notes[family] || (family.includes('neural') ? notes.mlp : null)
   return { chineseName: value?.[0] || family, description: value?.[1] || '运行手写算法，分析真实样本上的预测表现。', insight: value?.[2] || '结合参数、评价指标与可视化结果解释模型行为。' }
 }

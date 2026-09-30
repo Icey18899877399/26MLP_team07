@@ -1,10 +1,12 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.integration.ml_backend import MLBackend, PackageMLBackend
 from backend.interaction.routes import router
+from backend.interaction.validation import chinese_validation_error_handler
 from backend.settings import Settings
 
 
@@ -18,7 +20,7 @@ def create_app(
     app = FastAPI(
         title="机器学习理论与实践交互平台",
         version="0.1.0",
-        description="Thin HTTP interaction layer over the independent ml_core package.",
+        description="独立 ml_core 包之上的轻量 HTTP 交互层。",
     )
     app.state.settings = resolved_settings
     app.state.ml_backend = (
@@ -26,6 +28,7 @@ def create_app(
         if ml_backend is not None
         else PackageMLBackend(package_name=resolved_settings.ml_package)
     )
+    app.add_exception_handler(RequestValidationError, chinese_validation_error_handler)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,

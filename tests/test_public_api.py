@@ -45,11 +45,24 @@ class DiscoveryAndValidationTests(unittest.TestCase):
 
         self.assertEqual(
             [item.id for item in ml_core.list_models()],
-            ["kmeans.optimized", "logistic_regression.optimized"],
+            [
+                "cart_decision_tree.optimized",
+                "dbscan.optimized",
+                "gaussian_naive_bayes.optimized",
+                "gbdt_regression.optimized",
+                "isolation_forest.optimized",
+                "kmeans.optimized",
+                "knn.optimized",
+                "linear_regression.optimized",
+                "logistic_regression.optimized",
+                "mlp_regression.optimized",
+                "one_class_svm.optimized",
+                "random_forest.optimized",
+            ],
         )
         self.assertEqual(
             [item.id for item in ml_core.list_datasets()],
-            ["seeds", "wdbc"],
+            ["23_mammography", "6_cardio", "california_housing", "concrete", "seeds", "wdbc"],
         )
 
     def test_unknown_model_is_distinct_from_unknown_dataset(self):

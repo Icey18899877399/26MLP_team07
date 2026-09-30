@@ -20,19 +20,19 @@ router = APIRouter(prefix="/api")
 UNAVAILABLE_RESPONSE = {
     status.HTTP_503_SERVICE_UNAVAILABLE: {
         "model": ErrorResponse,
-        "description": "The ml_core package is missing or violates the public contract.",
+        "description": "ml_core 包缺失或不符合公共合同。",
     }
 }
 EXECUTION_RESPONSE = {
     status.HTTP_502_BAD_GATEWAY: {
         "model": ErrorResponse,
-        "description": "The ML package failed or returned an invalid result.",
+        "description": "ML 包执行失败或返回了无效结果。",
     }
 }
 REQUEST_RESPONSE = {
     status.HTTP_400_BAD_REQUEST: {
         "model": ErrorResponse,
-        "description": "The ML package rejected the experiment configuration.",
+        "description": "ML 包拒绝了实验配置。",
     }
 }
 
@@ -56,7 +56,7 @@ def _translate_error(exc: Exception) -> HTTPException:
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail={
             "code": "ml_execution_failed",
-            "message": "ML package execution failed",
+            "message": "ML 包执行失败",
         },
     )
 

@@ -1,28 +1,33 @@
 /**
- * Mock 后端服务器 —— 用 Node 模拟 Python 后端，协议与 docs/PROTOCOL.md 完全一致。
- * 前端开发/演示期间可完全依赖它：算法注册、数据集详情、训练全流程（含断线继续训练）。
+ * Mock 后端服务器 —— 按 HTTP_API_CONTRACT.md 实现的替身后端（node:http，零依赖）。
+ * 前端开发/演示期间可完全依赖它：模型/数据集发现、健康检查、同步实验。
  *
  * 启动：
- *   node mock/server.js                # 默认 127.0.0.1:8765
- *   node mock/server.js --port 9000    # 换端口
- *   node mock/server.js --fast         # 训练只跑 5 个 epoch（快速演示）
+ *   node mock/server.js                 # 默认 http://127.0.0.1:8765
+ *   node mock/server.js --port 9000     # 换端口
+ *   node mock/server.js --no-ml         # 模拟 ml_core 缺失（health available=false）
+ *   node mock/server.js --delay 0       # 覆盖实验响应延迟（默认 1000~3000ms）
  *
- * 与真实后端的差异：训练过程是模拟的（假 loss 曲线 + 性能表加噪声），
- * 后端同学照 PROTOCOL.md 实现真实训练即可无缝替换。
+ * 与真实后端的差异：训练是模拟的（性能表加噪声，以 run_id 为种子可复现）。
+ * 后端同学按 HTTP_API_CONTRACT.md 实现真实 FastAPI 服务即可无缝替换。
  */
-import { WebSocketServer } from 'ws'
-import { ALGORITHMS, DATASETS, METRICS, PERFORMANCE, LOSS_CURVES } from './registry.js'
+import http from 'node:http'
+import crypto from 'node:crypto'
+import { MODELS, DATASETS, PERFORMANCE } from './registry.js'
 
 // ---------- 命令行参数 ----------
 const args = process.argv.slice(2)
 const portIdx = args.indexOf('--port')
 const PORT = portIdx >= 0 ? parseInt(args[portIdx + 1], 10) : 8765
-const FAST = args.includes('--fast')
-const EPOCH_INTERVAL = FAST ? 60 : 300
-const TOTAL_EPOCHS_RANGE = FAST ? [5, 5] : [30, 90]
+const NO_ML = args.includes('--no-ml')
+const delayIdx = args.indexOf('--delay')
+const DELAY_OVERRIDE = delayIdx >= 0 ? parseInt(args[delayIdx + 1], 10) : null
+
+const ALLOWED_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173'])
+const ALLOWED_FIELDS = new Set(['model', 'dataset', 'params', 'test_size', 'random_state'])
 
 // ---------- 工具 ----------
-/** mulberry32 种子随机数：同 runId 结果可复现 */
+/** mulberry32 种子随机数：同 run_id 结果可复现 */
 function mulberry32(seed) {
   let a = seed >>> 0
   return function () {
@@ -42,326 +47,253 @@ function hashStr(str) {
   return h >>> 0
 }
 
-const log = (...msg) => console.log('[MOCK]', ...msg)
-
-/** 发送：JSON 序列化失败时保护 */
-function send(ws, msg) {
-  try {
-    ws.send(JSON.stringify(msg))
-  } catch (err) {
-    log('发送失败:', err.message)
-  }
-}
-
-// ---------- 全局运行状态（训练跨连接持续，见协议"断线继续训练"） ----------
-const runs = new Map() // runId -> runState
-
-function buildRegistryPayload() {
-  return {
-    server: { name: 'mock-backend', version: '0.1.0', protocolVersion: 1 },
-    taskTypes: ['classification', 'regression', 'clustering'],
-    algorithms: ALGORITHMS,
-    datasets: DATASETS.map((d) => ({
-      id: d.id,
-      name: d.name,
-      taskType: d.taskType,
-      nSamples: d.nSamples,
-      nFeatures: d.nFeatures,
-      nClasses: d.nClasses,
-      description: d.description,
-      split: d.split
-    })),
-    metrics: METRICS
-  }
-}
-
-// ---------- 模拟训练 ----------
-function makeProgress(run) {
-  const curve = LOSS_CURVES[run.curve] || LOSS_CURVES.fast
-  const base = curve.baseLoss * Math.exp(-curve.decay * run.epoch)
-  let loss
-  if (curve.stepwise) {
-    // 决策树：每 5 个 epoch 阶梯式下降
-    loss = curve.baseLoss * Math.exp(-curve.decay * Math.floor(run.epoch / 5) * 5)
-  } else if (curve.floor) {
-    loss = Math.max(curve.floor, base)
-  } else {
-    loss = base
-  }
-  loss += (run.rand() - 0.5) * loss * 0.1 // ±5% 噪声
-
-  const metrics = { loss: round4(loss) }
-  // 分类任务附带验证集 loss 与训练准确率
-  if (run.taskType === 'classification') {
-    const acc = Math.min(1, 0.2 + 0.8 * (1 - Math.exp(-curve.decay * run.epoch * 2)))
-    metrics.val_loss = round4(loss * (1.05 + run.rand() * 0.15))
-    metrics.accuracy = round4(acc + (run.rand() - 0.5) * 0.03)
-  }
-  return metrics
-}
-
 function round4(v) {
   return Math.round(v * 10000) / 10000
 }
 
-/** 生成混淆矩阵（近似对角线分布） */
-function makeConfusionMatrix(dataset, accuracy, rand) {
-  const n = dataset.nClasses
-  const testRatio = dataset.split.defaultTestRatio
-  const total = Math.round(dataset.nSamples * testRatio)
-  const perClass = dataset.classDistribution.map((c) => Math.round((c / dataset.nSamples) * total))
+const log = (...msg) => console.log('[MOCK]', ...msg)
 
-  const matrix = Array.from({ length: n }, () => Array(n).fill(0))
-  for (let c = 0; c < n; c++) {
-    const correct = Math.round(perClass[c] * accuracy)
-    matrix[c][c] = correct
-    let errors = perClass[c] - correct
-    for (let j = 0; j < n && errors > 0; j++) {
-      if (j === c) continue
-      const take = j === n - 1 || (c + 1) % n === j ? errors : Math.floor(errors * rand())
-      const assigned = Math.min(take, errors)
-      matrix[c][j] += assigned
-      errors -= assigned
-    }
-  }
-  return matrix
+// ---------- HTTP 工具 ----------
+function sendJson(res, status, body) {
+  const data = JSON.stringify(body)
+  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.end(data)
 }
 
-/** 生成 ROC 曲线数据（近似形状） */
-function makeRocCurves(dataset, rand) {
-  const n = dataset.nClasses
-  const curves = []
-  for (let c = 0; c < n; c++) {
-    const auc = 0.85 + rand() * 0.14 // 0.85~0.99
-    const fpr = [0, rand() * 0.2, 1]
-    const tpr = [0, 0.85 + rand() * 0.1, 1]
-    curves.push({ label: dataset.classNames[c], fpr, tpr, auc: round4(auc) })
-  }
-  const avgAuc = round4(curves.reduce((s, c) => s + c.auc, 0) / n)
-  return { auc: avgAuc, curves }
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = ''
+    req.on('data', (chunk) => {
+      raw += chunk
+      if (raw.length > 1e6) reject(new Error('body too large'))
+    })
+    req.on('end', () => resolve(raw))
+    req.on('error', reject)
+  })
 }
 
-function finishRun(run) {
-  const dataset = DATASETS.find((d) => d.id === run.datasetId)
-  const perf = PERFORMANCE[`${run.algoId}@${run.datasetId}`]
+function withCors(req, res) {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  const origin = req.headers.origin
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  }
+}
+
+// ---------- 模拟实验 ----------
+/**
+ * 生成实验 metrics。键集合与真实后端各任务适配器输出一致：
+ * 分类 8 键（accuracy/precision/recall/f1/tn/fp/fn/tp）、回归 4 键、
+ * 聚类分 kmeans（inertia/ARI/n_clusters）与 dbscan（n_clusters/noise_points/ARI）两套、
+ * 异常 5 键（true/detected/anomaly_recall/anomaly_precision/anomaly_f1）。
+ * 全部为有限数值（合同要求）。
+ */
+function makeMetrics(model, dataset, rand) {
+  const perf = PERFORMANCE[`${model.id}@${dataset.id}`]
   const metrics = {}
 
-  if (run.taskType === 'classification') {
-    const noise = (run.rand() - 0.5) * 0.03 // ±1.5% 噪声
+  if (dataset.task === 'classification') {
+    const noise = (rand() - 0.5) * 0.03 // ±1.5% 噪声
     metrics.accuracy = round4(Math.min(1, (perf?.accuracy ?? 0.9) + noise))
     metrics.precision = round4(Math.min(1, (perf?.precision ?? 0.9) + noise))
     metrics.recall = round4(Math.min(1, (perf?.recall ?? 0.9) + noise))
     metrics.f1 = round4(Math.min(1, (perf?.f1 ?? 0.9) + noise))
-    metrics.confusion_matrix = makeConfusionMatrix(dataset, metrics.accuracy, run.rand)
-    metrics.class_names = dataset.classNames
-    metrics.roc_auc = makeRocCurves(dataset, run.rand)
-  } else if (run.taskType === 'regression') {
-    metrics.mse = round4((perf?.mse ?? 20) * (1 + (run.rand() - 0.5) * 0.1))
+    metrics.tn = Math.round(perf?.tn ?? 70)
+    metrics.fp = Math.round(perf?.fp ?? 3)
+    metrics.fn = Math.round(perf?.fn ?? 2)
+    metrics.tp = Math.round(perf?.tp ?? 39)
+  } else if (dataset.task === 'regression') {
+    metrics.mse = round4((perf?.mse ?? 20) * (1 + (rand() - 0.5) * 0.1))
     metrics.rmse = round4(Math.sqrt(metrics.mse))
-    metrics.mae = round4((perf?.mae ?? 3) * (1 + (run.rand() - 0.5) * 0.1))
-    metrics.r2 = round4(Math.min(0.99, (perf?.r2 ?? 0.7) * (1 + (run.rand() - 0.5) * 0.06)))
-  } else if (run.taskType === 'clustering') {
-    metrics.silhouette = round4(Math.max(0, (perf?.silhouette ?? 0.7) + (run.rand() - 0.5) * 0.08))
-    metrics.davies_bouldin = round4((perf?.davies_bouldin ?? 0.6) * (1 + (run.rand() - 0.5) * 0.2))
-    metrics.inertia = Math.round((perf?.inertia ?? 4000) * (1 + (run.rand() - 0.5) * 0.1))
+    metrics.mae = round4((perf?.mae ?? 3) * (1 + (rand() - 0.5) * 0.1))
+    metrics.r2 = round4(Math.min(0.99, (perf?.r2 ?? 0.7) * (1 + (rand() - 0.5) * 0.06)))
+  } else if (dataset.task === 'clustering') {
+    if (model.id === 'dbscan.optimized') {
+      metrics.n_clusters = Math.round(perf?.n_clusters ?? 3)
+      metrics.noise_points = Math.round(perf?.noise_points ?? 12)
+      metrics.adjusted_rand_index = round4(Math.min(1, Math.max(-1, (perf?.adjusted_rand_index ?? 0.65) + (rand() - 0.5) * 0.08)))
+    } else {
+      metrics.inertia = round4((perf?.inertia ?? 180) * (1 + (rand() - 0.5) * 0.1))
+      metrics.adjusted_rand_index = round4(Math.min(1, Math.max(-1, (perf?.adjusted_rand_index ?? 0.72) + (rand() - 0.5) * 0.06)))
+      metrics.n_clusters = Math.round(perf?.n_clusters ?? 3)
+    }
+  } else if (dataset.task === 'anomaly_detection') {
+    metrics.true_anomalies = Math.round(perf?.true_anomalies ?? 176)
+    metrics.detected_anomalies = Math.round(perf?.detected_anomalies ?? 190)
+    metrics.anomaly_recall = round4(Math.min(1, Math.max(0, (perf?.anomaly_recall ?? 0.8) + (rand() - 0.5) * 0.06)))
+    metrics.anomaly_precision = round4(Math.min(1, Math.max(0, (perf?.anomaly_precision ?? 0.75) + (rand() - 0.5) * 0.06)))
+    metrics.anomaly_f1 = round4(Math.min(1, Math.max(0, (perf?.anomaly_f1 ?? 0.78) + (rand() - 0.5) * 0.06)))
   }
-
-  metrics.durations = { train_ms: perf?.train_ms ?? 50, eval_ms: perf?.eval_ms ?? 30 }
   return metrics
 }
 
-function startTraining(payload) {
-  const algo = ALGORITHMS.find((a) => a.id === payload.algorithmId)
-  const dataset = DATASETS.find((d) => d.id === payload.datasetId)
-  const perf = PERFORMANCE[`${payload.algorithmId}@${payload.datasetId}`]
+// ---------- 路由 ----------
+async function handleRequest(req, res) {
+  withCors(req, res)
+  const url = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`)
+  const path = url.pathname
 
-  const [minEp, maxEp] = TOTAL_EPOCHS_RANGE
-  const run = {
-    id: payload.runId,
-    algoId: payload.algorithmId,
-    datasetId: payload.datasetId,
-    taskType: dataset.taskType,
-    hyperparams: payload.hyperparams || {},
-    split: payload.split || null,
-    curve: perf?.curve || 'fast',
-    epoch: 0,
-    totalEpochs: minEp + Math.floor(hashStr(payload.runId) % (maxEp - minEp + 1)),
-    rand: mulberry32(hashStr(payload.runId)),
-    status: 'running',
-    subscribers: new Set(),
-    interval: null,
-    result: null,
-    startedAt: Date.now()
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204)
+    res.end()
+    return
   }
-  runs.set(run.id, run)
 
-  run.interval = setInterval(() => {
-    run.epoch += 1
-    const progress = {
-      type: 'training.progress',
-      payload: {
-        runId: run.id,
-        epoch: run.epoch,
-        totalEpochs: run.totalEpochs,
-        elapsedMs: Date.now() - run.startedAt,
-        stage: 'train',
-        metrics: makeProgress(run)
+  // 健康检查：服务可用时恒 200；available 取决于 --no-ml
+  if (path === '/api/health' && req.method === 'GET') {
+    sendJson(res, 200, {
+      status: 'ok',
+      ml_backend: {
+        available: false, // Reference demo only: never enable real training in the application.
+        package: 'offline_demo',
+        detail: NO_ML ? 'Mock 模式：模拟 ml_core 缺失' : 'Mock ML 包已连接（模拟数据）'
       }
-    }
-    for (const ws of run.subscribers) send(ws, progress)
-    log(`progress ${run.id} epoch ${run.epoch}/${run.totalEpochs}`)
+    })
+    return
+  }
 
-    if (run.epoch >= run.totalEpochs) {
-      clearInterval(run.interval)
-      run.interval = null
-      run.status = 'done'
-      run.result = {
-        runId: run.id,
-        algorithmId: run.algoId,
-        datasetId: run.datasetId,
-        status: 'done',
-        hyperparams: run.hyperparams,
-        metrics: finishRun(run)
-      }
-      const resultMsg = { type: 'training.result', payload: run.result }
-      for (const ws of run.subscribers) send(ws, resultMsg)
-      log(`result ${run.id} 完成`)
-    }
-  }, EPOCH_INTERVAL)
+  if (path === '/api/models' && req.method === 'GET') {
+    sendJson(res, 200, MODELS)
+    return
+  }
+
+  if (path === '/api/datasets' && req.method === 'GET') {
+    sendJson(res, 200, DATASETS)
+    return
+  }
+
+  if (path === '/api/experiments' && req.method === 'POST') {
+    await handleExperiment(req, res)
+    return
+  }
+
+  sendJson(res, 404, { detail: { code: 'not_found', message: '接口不存在' } })
 }
 
-function handleMessage(ws, msg) {
-  const { type, id, payload = {} } = msg
-  log('←', type, payload.runId || payload.datasetId || '')
+async function handleExperiment(req, res) {
+  let raw
+  try {
+    raw = await readBody(req)
+  } catch (err) {
+    sendJson(res, 413, { detail: { code: 'payload_too_large', message: '请求体过大' } })
+    return
+  }
 
-  switch (type) {
-    case 'ping': {
-      send(ws, { type: 'pong', replyTo: id, payload: { t: payload.t } })
-      break
+  let body
+  try {
+    body = JSON.parse(raw)
+  } catch (err) {
+    sendJson(res, 422, {
+      detail: [{ loc: ['body'], msg: 'Invalid JSON', type: 'value_error.jsondecode' }]
+    })
+    return
+  }
+
+  // 未知顶层字段 → 422（合同：未声明字段返回 422）
+  const extraFields = Object.keys(body).filter((k) => !ALLOWED_FIELDS.has(k))
+  if (extraFields.length > 0) {
+    sendJson(res, 422, {
+      detail: extraFields.map((field) => ({
+        loc: ['body', field],
+        msg: 'extra fields not permitted',
+        type: 'value_error.extra'
+      }))
+    })
+    return
+  }
+
+  // 未知模型/数据集 → 400
+  const model = MODELS.find((m) => m.id === body.model)
+  const dataset = DATASETS.find((d) => d.id === body.dataset)
+  if (!model) {
+    sendJson(res, 400, { detail: { code: 'ml_request_rejected', message: `未知模型: ${body.model}` } })
+    return
+  }
+  if (!dataset) {
+    sendJson(res, 400, { detail: { code: 'ml_request_rejected', message: `未知数据集: ${body.dataset}` } })
+    return
+  }
+
+  // 不兼容组合 → 400
+  if (!model.compatible_datasets.includes(dataset.id)) {
+    sendJson(res, 400, {
+      detail: { code: 'ml_request_rejected', message: `模型与数据集不兼容: ${model.id} × ${dataset.id}` }
+    })
+    return
+  }
+
+  // test_size 校验（合同：聚类必须省略；提供时必须在 0 与 1 之间）
+  if (body.test_size !== undefined && body.test_size !== null) {
+    if (dataset.task === 'clustering') {
+      sendJson(res, 400, {
+        detail: { code: 'ml_request_rejected', message: '聚类实验不得指定 test_size' }
+      })
+      return
     }
-
-    case 'config.get': {
-      send(ws, { type: 'config.registry', replyTo: id, payload: buildRegistryPayload() })
-      break
-    }
-
-    case 'dataset.load': {
-      const ds = DATASETS.find((d) => d.id === payload.datasetId)
-      if (!ds) {
-        send(ws, {
-          type: 'dataset.error',
-          replyTo: id,
-          payload: { id: payload.datasetId, code: 'UNKNOWN_DATASET', message: `数据集 ${payload.datasetId} 不存在` }
-        })
-        break
-      }
-      const info = {
-        ...ds,
-        sampleRows: ds.sampleRows.slice(0, 50), // 协议约定最多 50 行
-        splitPreview: {
-          train: Math.round(ds.nSamples * (1 - ds.split.defaultTestRatio)),
-          test: Math.round(ds.nSamples * ds.split.defaultTestRatio),
-          seed: ds.split.defaultSeed
-        }
-      }
-      send(ws, { type: 'dataset.info', replyTo: id, payload: info })
-      break
-    }
-
-    case 'training.start': {
-      const algoOk = ALGORITHMS.some((a) => a.id === payload.algorithmId)
-      const dsOk = DATASETS.some((d) => d.id === payload.datasetId)
-      if (!algoOk || !dsOk) {
-        send(ws, {
-          type: 'training.error',
-          replyTo: id,
-          payload: {
-            runId: payload.runId,
-            code: !algoOk ? 'UNKNOWN_ALGORITHM' : 'UNKNOWN_DATASET',
-            message: `未知的${!algoOk ? '算法' : '数据集'}: ${!algoOk ? payload.algorithmId : payload.datasetId}`
+    if (typeof body.test_size !== 'number' || !Number.isFinite(body.test_size) || body.test_size <= 0 || body.test_size >= 1) {
+      sendJson(res, 422, {
+        detail: [
+          {
+            loc: ['body', 'test_size'],
+            msg: 'test_size 必须在 0 与 1 之间',
+            type: 'value_error.number.not_gt'
           }
-        })
-        break
-      }
-      // 同名 run 重复 start → 复用已有 run（幂等）
-      const existing = runs.get(payload.runId)
-      if (existing) {
-        existing.subscribers.add(ws)
-        send(ws, { type: 'training.accepted', replyTo: id, payload: { runId: payload.runId } })
-        break
-      }
-      startTraining(payload)
-      runs.get(payload.runId).subscribers.add(ws)
-      send(ws, { type: 'training.accepted', replyTo: id, payload: { runId: payload.runId } })
-      break
-    }
-
-    case 'training.cancel': {
-      const run = runs.get(payload.runId)
-      if (run && run.interval) {
-        clearInterval(run.interval)
-        run.interval = null
-        run.status = 'cancelled'
-        for (const sub of run.subscribers) {
-          send(sub, { type: 'training.cancelled', replyTo: id, payload: { runId: payload.runId } })
-        }
-      }
-      break
-    }
-
-    case 'training.subscribe': {
-      const run = runs.get(payload.runId)
-      if (!run) {
-        send(ws, {
-          type: 'training.error',
-          replyTo: id,
-          payload: { runId: payload.runId, code: 'NOT_FOUND', message: '训练不存在（后端已重启，运行已丢失）' }
-        })
-        break
-      }
-      if (run.status === 'running') {
-        run.subscribers.add(ws)
-        send(ws, { type: 'training.accepted', replyTo: id, payload: { runId: payload.runId } })
-      } else if (run.status === 'done') {
-        send(ws, { type: 'training.result', replyTo: id, payload: run.result })
-      } else if (run.status === 'cancelled') {
-        send(ws, { type: 'training.cancelled', replyTo: id, payload: { runId: payload.runId } })
-      }
-      break
-    }
-
-    default: {
-      // 协议前向兼容：忽略未知消息
-      log('未知消息类型，忽略:', type)
+        ]
+      })
+      return
     }
   }
+
+  if (body.params !== undefined && (typeof body.params !== 'object' || body.params === null || Array.isArray(body.params))) {
+    sendJson(res, 422, {
+      detail: [{ loc: ['body', 'params'], msg: 'params 必须是对象', type: 'type_error.dict' }]
+    })
+    return
+  }
+
+  // 模拟同步训练：延迟后返回最终结果
+  const delay = DELAY_OVERRIDE ?? 1000 + Math.random() * 2000
+  const startedAt = Date.now()
+  await new Promise((resolve) => setTimeout(resolve, delay))
+  const elapsed = Date.now() - startedAt
+
+  const runId = crypto.randomUUID()
+  const rand = mulberry32(hashStr(runId))
+  const perf = PERFORMANCE[`${model.id}@${dataset.id}`]
+
+  const resp = {
+    run_id: runId,
+    model: model.id,
+    dataset: dataset.id,
+    task: dataset.task,
+    effective_params: body.params || {},
+    metrics: makeMetrics(model, dataset, rand),
+    artifacts: [],
+    metadata: {
+      sample_count: dataset.sample_count,
+      feature_count: dataset.feature_count,
+      elapsed_ms: elapsed,
+      train_ms: perf?.train_ms ?? 50,
+      eval_ms: perf?.eval_ms ?? 30
+    }
+  }
+  log(`实验完成 ${model.id} × ${dataset.id} → ${runId}（${elapsed}ms）`)
+  sendJson(res, 200, resp)
 }
 
 // ---------- 服务器 ----------
-const wss = new WebSocketServer({ port: PORT, host: '127.0.0.1' })
-
-wss.on('connection', (ws) => {
-  log(`客户端连接（当前 ${wss.clients.size} 个）`)
-
-  // 连接即推送注册表（协议：无需客户端请求）
-  send(ws, { type: 'config.registry', payload: buildRegistryPayload() })
-
-  ws.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data.toString())
-      handleMessage(ws, msg)
-    } catch (err) {
-      log('消息处理出错:', err.message)
+const server = http.createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    log('请求处理出错:', err.message)
+    if (!res.headersSent) {
+      sendJson(res, 500, { detail: { code: 'internal_error', message: '服务器内部错误' } })
+    } else {
+      res.end()
     }
-  })
-
-  ws.on('close', () => {
-    // 从所有 run 的订阅者中移除该连接；训练本身继续运行（协议要求）
-    for (const run of runs.values()) {
-      run.subscribers.delete(ws)
-    }
-    log(`客户端断开（剩余 ${wss.clients.size} 个）`)
   })
 })
 
-log(`Mock 后端已启动: ws://127.0.0.1:${PORT}${FAST ? '（fast 模式）' : ''}`)
+server.listen(PORT, '127.0.0.1', () => {
+  log(`Mock 后端已启动: http://127.0.0.1:${PORT}${NO_ML ? '（--no-ml 模式）' : ''}`)
+})

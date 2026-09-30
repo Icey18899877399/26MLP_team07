@@ -119,5 +119,5 @@ def test_execution_failure_returns_generic_502_without_internal_path() -> None:
     assert response.status_code == 502
     body = response.json()
     assert body["detail"]["code"] == "ml_execution_failed"
-    assert body["detail"]["message"] == "ML package execution failed"
+    assert body["detail"]["message"] == "ML 包执行失败"
     assert "private" not in response.text

@@ -6,6 +6,8 @@
 
 **Tech stack:** Vue 3, ECharts, FastAPI, ml_core, Python; retain explicit dependency metadata.
 
+**2026-09-30 scope update:** User supplied three teammate PRs and requested synchronization before continuing. Use their canonical twelve optimized model IDs and six datasets (not the earlier proposed 24 variants). Preserve local checkpoint 391b637; integrate ML PR a72ea7f, backend PR e83f128 and frontend PR 2100a6e. Keep native HTTP, add genuine charts and explicit anomaly in-sample evaluation labels. Do not mutate teammates' remote repositories.
+
 ## Shared interfaces
 
 - GET /api/models returns ModelInfo: id, display_name, task, compatible_datasets, default_params, parameter_descriptions.
@@ -18,10 +20,10 @@
 ## Independent work areas
 
 - [x] Backend sync: imported upstream f33e37c source/tests and native HTTP docs, retained monorepo dependency path. Native requests and legacy variant rejection covered; 39 backend tests passed before model expansion.
-- [ ] Model adapters: register all 12 families with actual scratch estimators, dataset resources/loaders, deterministic valid train/test evaluation, true per-task charts. Add all-family smoke tests and update discovery assertions. Keep Models unchanged.
-- [ ] Frontend: consume native contract, task/family catalog, meaningful parameter controls, training status, result charts, data overview and comparable run history. Add native request/result unit tests and extend browser smoke.
-- [ ] Integration: install declared dependencies; run backend, model and frontend tests, build frontend; exercise all 12 algorithms through HTTP and representative charts through browser. Review changes and fix actionable findings.
-- [ ] Delivery: document upstream SHA, supported algorithms and datasets, sampling/normalization semantics and limits. Commit and push the validated result to the user's main with a non-force update.
+- [x] Model adapters: merged peer twelve optimized runners and six datasets; added genuine per-task charts and strict finite JSON. Classified/regression hold-outs remain disjoint, anomaly is explicitly sample-internal. Corrected positive-class ROC probability column ordering. Models unchanged; 358 unittest tests plus focused chart checks passed.
+- [x] Frontend: integrated peer native HTTP, Chinese workbench and all four views, true chart gallery/enlargement/PNG export, history/reproduction/comparison. Fixed endpoint races, numeric gamma, quota handling and obsolete mock history isolation; 14 tests passed.
+- [x] Integration: 358 model unittest tests, 5 focused chart tests, 56 backend tests, 14 frontend tests, production build and isolated wheel installation passed. All 12 algorithms passed both real HTTP smoke and browser smoke; browser also covered chart/image/JSON export, persisted history, six datasets, comparison, manual and 390px layout. Independent code review has no remaining blockers.
+- [x] Delivery preparation: recorded all three upstream PR SHAs, supported algorithms/datasets, sampling and evaluation limitations. Validated integration is ready for the user-authorized non-force main update; remote success is verified in the task handoff.
 
 ## Acceptance checks
 

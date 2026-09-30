@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     @classmethod
     def validate_cors_origins(cls, origins: list[str]) -> list[str]:
         if not origins:
-            raise ValueError("at least one CORS origin is required")
+            raise ValueError("至少需要配置一个 CORS 来源")
 
         normalized: list[str] = []
         for origin in origins:
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
             try:
                 parts.port
             except ValueError as exc:
-                raise ValueError(f"invalid CORS origin: {origin}") from exc
+                raise ValueError(f"无效的 CORS 来源: {origin}") from exc
             if (
                 origin == "*"
                 or parts.scheme not in {"http", "https"}
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
                 or parts.query
                 or parts.fragment
             ):
-                raise ValueError(f"invalid CORS origin: {origin}")
+                raise ValueError(f"无效的 CORS 来源: {origin}")
             canonical = f"{parts.scheme.lower()}://{parts.netloc.lower()}"
             if canonical not in normalized:
                 normalized.append(canonical)

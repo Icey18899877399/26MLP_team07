@@ -111,12 +111,12 @@ class PackageMLBackend:
             return MLBackendStatus(
                 available=False,
                 package=self._package_name,
-                detail=self._unavailable_reason or "ML package 不可用",
+                detail=self._unavailable_reason or "ML 包不可用",
             )
         return MLBackendStatus(
             available=True,
             package=self._package_name,
-            detail="ML public package API 已连接",
+            detail="ML 公共包 API 已连接",
         )
 
     def list_models(self) -> list[ModelInfo]:
@@ -240,12 +240,12 @@ class PackageMLBackend:
         item_name: str,
     ) -> list[Any]:
         if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
-            raise MLExecutionError(f"ML package 返回的 {item_name} 列表格式无效")
+            raise MLExecutionError(f"ML 包返回的 {item_name} 列表格式无效")
         try:
             return [schema.model_validate(cls._to_mapping(item)) for item in values]
         except (TypeError, ValueError, ValidationError) as exc:
             raise MLExecutionError(
-                f"ML package 返回的 {item_name} 数据不符合公共合同: {exc}"
+                f"ML 包返回的 {item_name} 数据不符合公共合同: {exc}"
             ) from exc
 
     @staticmethod
